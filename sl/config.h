@@ -31,6 +31,11 @@
 #define DEBUG_SE_STACK_FRAME                0
 
 /**
+ * if 1, plot each abstraction/concretization step to a separate heap graph
+ */
+#define DEBUG_SYMABSTRACT                   0
+
+/**
  * if 1, the symcut module prints some extra debugging info
  */
 #define DEBUG_SYMCUT                        0
@@ -92,3 +97,8 @@
  * been plotted
  */
 #define SYMPLOT_STOP_AFTER_N_STATES         0x40
+
+#if 0
+#define SYMPLOT_STOP_CONDITION(name) \
+    (!(name).compare("symabstract-0003-DLS-0001-0000"))
+#endif

@@ -31,23 +31,50 @@
 #include "util.hh"
 
 #include <algorithm>                // for std::copy()
+#include <iomanip>
 #include <set>
+#include <sstream>
 #include <stack>
 
 #include <boost/foreach.hpp>
 #include <boost/tuple/tuple.hpp>
 
-#ifndef GC_ADMIT_LINUX_LISTS
-#   define GC_ADMIT_LINUX_LISTS 0
-#endif
+#if DEBUG_SYMABSTRACT
+#   include "symdump.hh"
+namespace {
+    static int cntAbstraction = -1;
+    static int cntAbstractionStep;
+    static std::string abstractionName;
 
-#ifndef SE_DISABLE_DLS
-#   define SE_DISABLE_DLS 0
-#endif
+    void debugPlotInit(std::string name) {
+        ++::cntAbstraction;
+        ::cntAbstractionStep = 0;
+        ::abstractionName = name;
+    }
 
-#ifndef SE_DISABLE_SLS
-#   define SE_DISABLE_SLS 0
-#endif
+    std::string debugPlotName() {
+        std::ostringstream str;
+
+#define FIXW(w) std::fixed << std::setfill('0') << std::setw(w)
+        str << "symabstract-" << FIXW(4) << ::cntAbstraction
+            << "-" << ::abstractionName
+            << "-" << FIXW(4) << (::cntAbstractionStep++);
+
+        return str.str();
+    }
+
+    void debugPlot(const SymHeap &sh) {
+        std::string name = debugPlotName();
+        dump_plot(sh, name.c_str());
+    }
+} // namespace
+
+#else // DEBUG_SYMABSTRACT
+namespace {
+    void debugPlotInit(std::string) { }
+    void debugPlot(const SymHeap &) { }
+}
+#endif // DEBUG_SYMABSTRACT
 
 /// common configuration template for abstraction triggering
 struct AbstractionThreshold {
@@ -58,45 +85,75 @@ struct AbstractionThreshold {
 
 /// abstraction trigger threshold for SLS
 static struct AbstractionThreshold slsThreshold = {
-    /* sparePrefix */ 1,
+    /* sparePrefix */ 0,
     /* innerSegLen */ 1,
     /* spareSuffix */ 0
 };
 
 /// abstraction trigger threshold for DLS
 static struct AbstractionThreshold dlsThreshold = {
-    /* sparePrefix */ 1,
+    /* sparePrefix */ 0,
     /* innerSegLen */ 1,
-    /* spareSuffix */ 1
+    /* spareSuffix */ 0
 };
 
-namespace {
-
-// we use a controlled recursion of depth 1
-void flatScan(SymHeap &sh, EObjKind kind, TObjId obj);
-
-bool doesAnyonePointToInsideVisitor(const SymHeap &sh, TObjId sub) {
-    const TValueId subAddr = sh.placedAt(sub);
-    return /* continue */ !sh.usedByCount(subAddr);
-}
-
-bool doesAnyonePointToInside(const SymHeap &sh, TObjId obj) {
-    return !traverseSubObjs(sh, obj, doesAnyonePointToInsideVisitor,
-                            /* leavesOnly */ false);
-}
-
-void dlSegHandleCrossNeq(SymHeap &sh, TObjId dls, SymHeap::ENeqOp op) {
-    const TObjId peer = dlSegPeer(sh, dls);
+void segHandleNeq(SymHeap &sh, TObjId seg, TObjId peer, SymHeap::ENeqOp op) {
     const TObjId next = nextPtrFromSeg(sh, peer);
     const TValueId valNext = sh.valueOf(next);
 
-    const TValueId headAddr = segHeadAddr(sh, dls);
+    const TValueId headAddr = segHeadAddr(sh, seg);
     sh.neqOp(op, headAddr, valNext);
+}
+
+void dlSegSetMinLength(SymHeap &sh, TObjId dls, unsigned len) {
+    const TObjId peer = dlSegPeer(sh, dls);
+    switch (len) {
+        case 0:
+            segHandleNeq(sh, dls, peer, SymHeap::NEQ_DEL);
+            return;
+
+        case 1:
+            segHandleNeq(sh, dls, peer, SymHeap::NEQ_ADD);
+            return;
+
+        case 2:
+        default:
+            break;
+    }
+
+    // let it be DLS 2+
+    const TValueId a1 = segHeadAddr(sh, dls);
+    const TValueId a2 = segHeadAddr(sh, peer);
+    sh.neqOp(SymHeap::NEQ_ADD, a1, a2);
+}
+
+void segSetMinLength(SymHeap &sh, TObjId seg, unsigned len) {
+    const EObjKind kind = sh.objKind(seg);
+    switch (kind) {
+        case OK_SLS:
+            segHandleNeq(sh, seg, seg, (len)
+                    ? SymHeap::NEQ_ADD
+                    : SymHeap::NEQ_DEL);
+            break;
+
+        case OK_DLS:
+            dlSegSetMinLength(sh, seg, len);
+            break;
+
+        default:
+#if SE_SELF_TEST
+            SE_TRAP;
+#endif
+            break;
+    }
 }
 
 TValueId /* addr */ segClone(SymHeap &sh, TValueId atAddr) {
     const TObjId seg = sh.pointsTo(atAddr);
     const TObjId dupSeg = sh.objDup(seg);
+
+    // read lower bound estimation of seg length
+    const unsigned len = segMinLength(sh, seg);
 
     if (OK_DLS == sh.objKind(seg)) {
         // we need to clone the peer as well
@@ -116,56 +173,11 @@ TValueId /* addr */ segClone(SymHeap &sh, TValueId atAddr) {
         sh.objSetValue(ppPeer, sh.placedAt(dupSeg));
     }
 
+    if (len)
+        // restore lower bound estimation of segment length
+        segSetMinLength(sh, dupSeg, len);
+
     return sh.placedAt(dupSeg);
-}
-
-void considerFlatScan(SymHeap &sh, TObjId obj) {
-    const TValueId addr = sh.placedAt(obj);
-    const unsigned cnt = sh.usedByCount(addr);
-    switch (cnt) {
-        case 0:
-#if GC_ADMIT_LINUX_LISTS
-            if (!doesAnyonePointToInside(sh, obj))
-#endif
-                CL_WARN("considerFlatScan() encountered an unused root "
-                        "object #" << obj);
-            break;
-
-        case 1:
-            // we use a controlled recursion of depth 1
-            flatScan(sh, OK_SLS, obj);
-            break;
-
-        case 2:
-            // we use a controlled recursion of depth 1
-            flatScan(sh, OK_DLS, obj);
-            break;
-    }
-}
-
-void considerFlatScan(SymHeap &sh, TValueId val1, TValueId val2) {
-    if (val1 < 0 || val2 < 0)
-        // giving up
-        return;
-
-    const EUnknownValue code1 = sh.valGetUnknown(val1);
-    if (UV_KNOWN != code1 && UV_ABSTRACT != code1)
-        // too fuzzy for us
-        return;
-
-    const EUnknownValue code2 = sh.valGetUnknown(val2);
-    if (UV_KNOWN != code2 && UV_ABSTRACT != code2)
-        // too fuzzy for us
-        return;
-
-    const TObjId o1 = sh.pointsTo(val1);
-    const TObjId o2 = sh.pointsTo(val2);
-    if (o1 <= 0 || o2 <= 0)
-        // there is no valid target --> nothing to abstract actually
-        return;
-
-    considerFlatScan(sh, o1);
-    considerFlatScan(sh, o2);
 }
 
 template <class TIgnoreList>
@@ -193,6 +205,18 @@ void buildIgnoreList(const SymHeap &sh, TObjId obj, TIgnoreList &ignoreList) {
     }
 }
 
+bool segEqual(const SymHeap &sh, TValueId v1, TValueId v2);
+bool segMayBePrototype(const SymHeap &sh, const TValueId segAt);
+
+bool segConsiderPrototype(const SymHeap     &sh,
+                          const TValueId    v1,
+                          const TValueId    v2)
+{
+    return segEqual(sh, v1, v2)
+        && segMayBePrototype(sh, v1)
+        && segMayBePrototype(sh, v2);
+}
+
 struct DataMatchVisitor {
     std::set<TObjId> ignoreList;
 
@@ -204,7 +228,9 @@ struct DataMatchVisitor {
         // first compare value IDs
         const TValueId v1 = sh.valueOf(o1);
         const TValueId v2 = sh.valueOf(item.second);
-        if (v1 == v2)
+
+        bool eq;
+        if (sh.proveEq(&eq, v1, v2) && eq)
             return /* continue */ true;
 
         // special values have to match
@@ -217,18 +243,18 @@ struct DataMatchVisitor {
             return /* mismatch */ false;
 
         switch (code) {
-            case UV_UNINITIALIZED:
-                // basically the asme as UV_KNOWN
             case UV_KNOWN:
                 // known values have to match
                 return false;
 
+            case UV_UNINITIALIZED:
             case UV_UNKNOWN:
                 // safe to keep UV_UNKNOWN values as they are
                 return true;
 
             case UV_ABSTRACT:
-                SE_TRAP;
+                // FIXME: unguarded recursion!
+                return segConsiderPrototype(sh, v1, v2);
         }
         return /* mismatch */ false;
     }
@@ -280,11 +306,11 @@ bool segEqual(const SymHeap &sh, TValueId v1, TValueId v2) {
     return traverseSubObjs(sh, item, visitor, /* leavesOnly */ true);
 }
 
-bool segMayBePrototype(const SymHeap &sh, const TValueId segAt, bool refByDls) {
+// TODO: rewrite the following nonsense!
+bool segMayBePrototype(const SymHeap &sh, const TValueId segAt) {
     const TObjId seg = sh.pointsTo(segAt);
-    TObjId peer = seg;
-    TObjId nextPtr;
-    TValueId addr;
+    const TValueId headAddr = segHeadAddr(sh, seg);
+    const TValueId valNext = sh.valueOf(nextPtrFromSeg(sh, seg));
 
     const EObjKind kind = sh.objKind(seg);
     switch (kind) {
@@ -296,43 +322,59 @@ bool segMayBePrototype(const SymHeap &sh, const TValueId segAt, bool refByDls) {
             return false;
 
         case OK_SLS:
-            if ((1U + refByDls) != sh.usedByCount(segAt)) {
-                CL_WARN("head is referenced, refusing SLS as prototype");
+            if (VAL_NULL != valNext)
                 return false;
-            }
-            break;
+
+            if (1U != sh.usedByCount(headAddr))
+                return false;
+
+            // TODO
+            return true;
 
         case OK_DLS:
-            if ((2U + refByDls) != sh.usedByCount(segAt)) {
-                CL_WARN("head is referenced, refusing DLS as prototype");
-                return false;
-            }
-            peer = dlSegPeer(sh, seg);
-            addr = sh.placedAt(peer);
-            if (1 != sh.usedByCount(addr)) {
-                CL_WARN("tail is referenced, refusing DLS as prototype");
-                return false;
-            }
-            nextPtr = nextPtrFromSeg(sh, peer);
-            if (VAL_NULL != sh.valueOf(nextPtr)) {
-                CL_WARN("next-link is not NULL, refusing DLS as prototype");
-                return false;
-            }
             break;
     }
 
-    nextPtr = nextPtrFromSeg(sh, seg);
-    if (VAL_NULL != sh.valueOf(nextPtr)) {
-        CL_WARN("out-link is not NULL, refusing segment as prototype");
+    const TObjId peer = dlSegPeer(sh, seg);
+    const TValueId valPrev = sh.valueOf(nextPtrFromSeg(sh, peer));
+    if (VAL_NULL != valNext || VAL_NULL != valPrev)
         return false;
+
+    const TValueId peerAddr = segHeadAddr(sh, peer);
+    if (1U != sh.usedByCount(peerAddr))
+        return false;
+
+    SymHeap::TContObj refs;
+    sh.usedBy(refs, headAddr);
+
+    const TObjId peerPtr = peerPtrFromSeg(sh, peer);
+    TObjId pointedFrom = OBJ_INVALID;
+
+    BOOST_FOREACH(const TObjId ref, refs) {
+        if (ref == peerPtr)
+            continue;
+
+        const TObjId root = objRoot(sh, ref);
+
+        if (OBJ_INVALID == pointedFrom) {
+            pointedFrom = root;
+            continue;
+        }
+
+        if (OK_DLS != sh.objKind(pointedFrom))
+            return false;
+
+        if (root == dlSegPeer(sh, pointedFrom))
+            continue;
+
+        SE_TRAP;
     }
 
+    // TODO
     return true;
 }
 
-TValueId mergeValues(SymHeap &sh, TValueId v1, TValueId v2,
-                     bool srcRefByDls, bool dstRefByDls)
-{
+TValueId mergeValues(SymHeap &sh, TValueId v1, TValueId v2) {
     if (v1 == v2)
         return v1;
 
@@ -356,36 +398,45 @@ TValueId mergeValues(SymHeap &sh, TValueId v1, TValueId v2,
         ? code1
         : UV_UNKNOWN;
 
-    if (UV_ABSTRACT == code) {
-        CL_WARN("support for nested segments is not well tested yet");
-        if (segEqual(sh, v1, v2)
-                && segMayBePrototype(sh, v1, srcRefByDls)
-                && segMayBePrototype(sh, v2, dstRefByDls))
-        {
-            // by merging the values, we drop the last reference;  destroy the seg
-            const TObjId seg1 = sh.pointsTo(v1);
-            segDestroy(sh, seg1);
+    if (UV_ABSTRACT != code)
+        return sh.valCreateUnknown(code, clt);
 
-            // duplicate the nested abstract object on call of concretizeObj()
-            const TObjId seg2 = sh.pointsTo(v2);
-            sh.objSetShared(seg2, false);
-
-            return v2;
-        }
-        else
-            // segments are not equal, no chance to merge them
-            code = UV_UNKNOWN;
+    if (!segConsiderPrototype(sh, v1, v2)) {
+        // no chance to create a prototype object - failure of segDiscover()
+        // or DataMatchVisitor?
+#if SE_SELF_TEST
+        SE_TRAP;
+#endif
+        return sh.valCreateUnknown(UV_UNKNOWN, clt);
     }
 
-    return sh.valCreateUnknown(code, clt);
+    // read lower bound estimation of seg1 length
+    const TObjId seg1 = sh.pointsTo(v1);
+    const unsigned len1 = segMinLength(sh, seg1);
+
+    // by merging the values, we drop the last reference;  destroy the seg
+    segSetMinLength(sh, seg1, /* LS 0+ */ 0);
+    segDestroy(sh, seg1);
+
+    // read lower bound estimation of seg2 length
+    const TObjId seg2 = sh.pointsTo(v2);
+    const unsigned len2 = segMinLength(sh, seg2);
+    segSetMinLength(sh, seg2, /* LS 0+ */ 0);
+
+    // duplicate the nested abstract object on call of concretizeObj()
+    sh.objSetShared(seg2, false);
+
+    // revalidate the lower bound estimation of segment length
+    segSetMinLength(sh, seg2, (len1 < len2)
+            ? len1
+            : len2);
+
+    return v2;
 }
 
 // visitor
 struct ValueAbstractor {
     std::set<TObjId>    ignoreList;
-    bool                srcIsDlSeg;
-    bool                dstIsDlSeg;
-    bool                flatScan;
     bool                bidir;
 
     bool operator()(SymHeap &sh, TObjPair item) const {
@@ -401,16 +452,8 @@ struct ValueAbstractor {
             // values are equal
             return /* continue */ true;
 
-        if (!this->flatScan) {
-            // prepare any nested abstractions for collapsing eventually
-            considerFlatScan(sh, valSrc, valDst);
-            valSrc = sh.valueOf(src);
-            valDst = sh.valueOf(dst);
-        }
-
-        // create a new unknown value as a placeholder
-        const TValueId valNew = mergeValues(sh, valSrc, valDst,
-                                            this->srcIsDlSeg, this->dstIsDlSeg);
+        // merge values
+        const TValueId valNew = mergeValues(sh, valSrc, valDst);
         sh.objSetValue(dst, valNew);
         if (this->bidir)
             sh.objSetValue(src, valNew);
@@ -464,13 +507,9 @@ struct UnknownValuesDuplicator {
 
 // when abstracting an object, we need to abstract all non-matching values in
 void abstractNonMatchingValues(SymHeap &sh, TObjId src, TObjId dst,
-                               bool flatScan, bool bidir = false,
-                               bool fresh = false)
+                               bool bidir = false)
 {
     ValueAbstractor visitor;
-    visitor.srcIsDlSeg  = (!fresh && OK_DLS == sh.objKind(src));
-    visitor.dstIsDlSeg  = (!fresh && OK_DLS == sh.objKind(dst));
-    visitor.flatScan    = flatScan;
     visitor.bidir       = bidir;
     buildIgnoreList(sh, dst, visitor.ignoreList);
 
@@ -488,391 +527,52 @@ void duplicateUnknownValues(SymHeap &sh, TObjId obj) {
     traverseSubObjs(sh, obj, visitor, /* leavesOnly */ true);
 }
 
-class ProbeVisitor {
-    private:
-        TValueId                addr_;
-        const struct cl_type    *clt_;
-        unsigned                arrity_;
-        TFieldIdxChain          icNext_;
-
-        // FIXME: this can't work well for Linux lists
-        bool dlSegEndCandidate(const SymHeap &sh, TObjId obj) const {
-            if (OK_DLS != static_cast<EObjKind>(arrity_) || icNext_.empty())
-                // we are not looking for a DLS either
-                return false;
-
-            const TObjId root = sh.pointsTo(addr_);
-            TObjId nextPtr = subObjByChain(sh, root, icNext_);
-            obj = sh.pointsTo(sh.valueOf(nextPtr));
-            if (obj <= 0)
-                // no valid next object
-                return false;
-
-            // if the next object has zero as 'next', give it a chance to go
-            nextPtr = subObjByChain(sh, obj, icNext_);
-            return (VAL_NULL == sh.valueOf(nextPtr));
-        }
-
-    public:
-        ProbeVisitor(const SymHeap &sh, TObjId root, EObjKind kind,
-                     TFieldIdxChain icNext = TFieldIdxChain()):
-            icNext_(icNext)
-        {
-            addr_ = sh.placedAt(root);
-            clt_  = sh.objType(root);
-            SE_BREAK_IF(!addr_ || !clt_ || CL_TYPE_STRUCT != clt_->code);
-
-            arrity_ = static_cast<unsigned>(kind);
-            SE_BREAK_IF(!arrity_);
-        }
-
-    bool operator()(const SymHeap &sh, TObjId obj) const {
-        const TValueId valNext = sh.valueOf(obj);
-        if (valNext <= 0 || valNext == addr_ || sh.valType(valNext) != clt_)
-            return /* continue */ true;
-
-        const EUnknownValue code = sh.valGetUnknown(valNext);
-        switch (code) {
-            case UV_KNOWN:
-            case UV_ABSTRACT:
-                // only known objects can be chained
-                break;
-
-            default:
-                return /* continue */ true;
-        }
-
-        const TObjId target = sh.pointsTo(valNext);
-        const TValueId targetAddr = sh.placedAt(target);
-        if (targetAddr <= 0)
-            // someone points to an already deleted object
-            return /* continue */ true;
-
-        if (sh.cVar(0, obj))
-            // a list segment through non-heap objects basically makes no sense
-            return /* continue */ true;
-
-        // compare arrity vs. count of references
-        const unsigned refs = sh.usedByCount(targetAddr);
-        if (refs != arrity_
-                // special quirk for DLS "end"
-                && (1 != refs || !this->dlSegEndCandidate(sh, obj)))
-            return /* continue */ true;
-
-        return doesAnyonePointToInside(sh, target);
-    }
-};
-
-template <class TDst>
-class ProbeVisitorTopLevel {
-    private:
-        TDst        &heads_;
-        EObjKind    kind_;
-
-    public:
-        ProbeVisitorTopLevel(TDst &heads, EObjKind kind):
-            heads_(heads),
-            kind_(kind)
-        {
-        }
-
-        bool operator()(const SymHeap &sh, TObjId sub, TFieldIdxChain ic) {
-            const TValueId addr = sh.placedAt(sub);
-            if (sh.usedByCount(addr) != static_cast<unsigned>(kind_))
-                return /* continue */ true;
-
-            const struct cl_type *clt = sh.objType(sub);
-            if (!clt || clt->code != CL_TYPE_STRUCT)
-                return /* continue */ true;
-
-            if (doesAnyonePointToInside(sh, sub))
-                return /* continue */ true;
-
-            const ProbeVisitor visitor(sh, sub, kind_);
-            if (traverseSubObjs(sh, sub, visitor, /* leavesOnly */ true))
-                return /* continue */ true;
-
-            heads_.push_back(ic);
-            return /* continue */ true;
-        }
-};
-
-template <class TDst>
-void probe(TDst &heads, const SymHeap &sh, TObjId obj, EObjKind kind) {
-    // create low level visitor
-    ProbeVisitorTopLevel<TDst> visitor(heads, kind);
-
-    // try to treat the root as list head (regular lists)
-    visitor(sh, obj, /* use the root */ TFieldIdxChain());
-
-    // try to look for alternative list heads (Linux lists)
-    traverseSubObjsIc(sh, obj, visitor);
-}
-
-template <class TDst>
-class SelectorFinder {
-    private:
-        TDst                    &dst_;
-        const struct cl_type    *clt_;
-        const ProbeVisitor      visitor_;
-        const EObjKind          kind_;
-
-    public:
-        SelectorFinder(TDst &dst, const SymHeap &sh, TObjId root, EObjKind kind)
-            :
-            dst_(dst),
-            clt_(sh.objType(root)),
-            visitor_(sh, root, kind),
-            kind_(kind)
-        {
-        }
-
-        bool operator()(const SymHeap &sh, TObjId sub, TFieldIdxChain ic) {
-            const struct cl_type *subClt = sh.objType(sub);
-            const bool backLinkCandidate = (VAL_NULL == sh.valueOf(sub)
-                    && subClt && subClt->code == CL_TYPE_PTR
-                    && *targetTypeOfPtr(subClt) == *clt_);
-
-            if (backLinkCandidate || !visitor_(sh, sub))
-                // great, we have a candidate
-                dst_.push_back(ic);
-
-            return /* continue */ true;
-        }
-};
-
-template <class TDst>
-void digAnyListSelectors(TDst &dst, const SymHeap &sh, TObjId obj,
-                         EObjKind kind, TFieldIdxChain icHead)
+void slSegAbstractionStep(SymHeap &sh, TObjId *pObj, const SegBindingFields &bf)
 {
-    // jump to list head
-    obj = subObjByChain(sh, obj, icHead);
-
-    // start with the head, going down the line
-    std::vector<TFieldIdxChain> tmp;
-    SelectorFinder<TDst> visitor(tmp, sh, obj, kind);
-    traverseSubObjsIc(sh, obj, visitor);
-
-    // now merge it together
-    BOOST_FOREACH(const TFieldIdxChain &ic, tmp) {
-        TFieldIdxChain icTmp(icHead);
-        std::copy(ic.begin(), ic.end(), std::back_inserter(icTmp));
-        dst.push_back(icTmp);
-    }
-}
-
-// FIXME: this function tends to be crowded
-// TODO: split it somehow to some more dedicated functions
-unsigned /* len */ segDiscover(const SymHeap &sh, TObjId entry, EObjKind kind,
-                               const SegBindingFields &bf)
-{
-    int dlSegsOnPath = 0;
-
-    // we use std::set to avoid an infinite loop
-    TObjId obj = entry;
-    std::set<TObjId> path;
-    while (!hasKey(path, obj)) {
-        path.insert(obj);
-        const TObjId objCurrent = obj;
-
-        const EObjKind kindEncountered = sh.objKind(obj);
-        if (OK_DLS == kindEncountered) {
-            // we've hit an already existing DLS on path, let's handle it such
-            if (OK_DLS != kind)
-                // arrity vs. kind mismatch
-                break;
-
-            // check selectors
-            const TFieldIdxChain icPeerEncountered = sh.objBinding(obj).peer;
-            if (icPeerEncountered != bf.next && icPeerEncountered != bf.peer)
-                // completely incompatible DLS, it gives us no go
-                break;
-
-            // jump to peer
-            obj = dlSegPeer(sh, obj);
-            if (hasKey(path, obj))
-                // we came from the wrong side this time
-                break;
-
-            path.insert(obj);
-            dlSegsOnPath++;
-        }
-
-        const TObjId objPtrNext = subObjByChain(sh, obj, bf.next);
-        // FIXME: check that nothing but head is pointed from outside!!!
-        const TObjId head = subObjByChain(sh, obj, bf.head);
-        const ProbeVisitor visitor(sh, head, kind, /* FIXME */ bf.next);
-        if (visitor(sh, objPtrNext))
-            // we can't go further
-            break;
-
-        TObjId objNext = obj;
-        skipObj(sh, &objNext, bf.head, bf.next);
-        if (objNext <= 0)
-            // there is no valid next object
-            break;
-
-        if (OK_DLS == kind) {
-            // check the back-link
-            const TObjId head = subObjByChain(sh, obj, bf.head);
-            const TValueId addrHead = sh.placedAt(head);
-            const TObjId objBackLink = subObjByChain(sh, objNext, bf.peer);
-            const TValueId valBackLink = sh.valueOf(objBackLink);
-
-            // we allow VAL_NULL as backLink in the first item of DLL
-            const bool dlSegHeadCandidate =
-                (objCurrent == entry && VAL_NULL == valBackLink);
-
-            if (!dlSegHeadCandidate && valBackLink != addrHead)
-                // inappropriate back-link
-                break;
-        }
-
-        obj = objNext;
-    }
-
-    // path consisting of N nodes has N-1 edges
-    const unsigned rawPathLen = path.size() - 1;
-
-    // each DLS consists of two nodes
-    return rawPathLen - dlSegsOnPath;
-}
-
-template <class TSelectorList>
-unsigned segDiscoverAll(const SymHeap &sh, const TObjId entry, EObjKind kind,
-                        const TSelectorList &selectors, TFieldIdxChain icHead,
-                        TFieldIdxChain *icNext, TFieldIdxChain *icPrev)
-{
-    // check count of the selectors
-    const unsigned cnt = selectors.size();
-    CL_DEBUG("    --> found " << cnt << " list selector candidate(s)");
-    if (!cnt)
-        // why are we called actually?
-        SE_TRAP;
-
-    unsigned prevMax = cnt;
-    switch (kind) {
-        case OK_CONCRETE:
-        case OK_HEAD:
-        case OK_PART:
-            // invalid call of segDiscoverAll()
-            SE_TRAP;
-
-        case OK_SLS:
-            // just choose one selector
-            prevMax = /* dummy value */ 1;
-            break;
-
-        case OK_DLS:
-            // we need at least 2 selectors for DLS abstraction
-            if (cnt < 2)
-                return /* found nothing */ 0;
-    }
-
-    // if (2 < cnt), try all possible combinations in case of DLS
-    // NOTE: This may take some time...
-#if SE_SELF_TEST
-    unsigned bestLen = 0, bestNext, bestPrev;
-#else
-    unsigned bestLen = 0, bestNext = 0, bestPrev = 0;
-#endif
-    for (unsigned next = 0; next < cnt; ++next) {
-        for (unsigned prev = 0; prev < prevMax; ++prev) {
-            if (OK_DLS == kind && next == prev)
-                // we need two _distinct_ selectors for a DLS
-                continue;
-
-            // gather segment binding fields
-            SegBindingFields bf;
-            bf.head = icHead;
-            bf.next = selectors[next];
-            bf.peer = selectors[prev];
-
-            // run discover for the current combination
-            const unsigned len = segDiscover(sh, entry, kind, bf);
-            if (!len)
-                continue;
-
-            CL_DEBUG("        --> found segment of length " << len);
-            if (bestLen < len) {
-                bestLen = len;
-                bestNext = next;
-                bestPrev = prev;
-            }
-        }
-    }
-
-    if (!bestLen) {
-        CL_DEBUG("        <-- no segment found");
-        return /* not found */ 0;
-    }
-
-    // something found
-    *icNext = selectors[bestNext];
-    *icPrev = selectors[bestPrev];
-    return bestLen;
-}
-
-void slSegCreateIfNeeded(SymHeap &sh, TObjId obj, const SegBindingFields &bf) {
+    const TObjId obj = *pObj;
     const EObjKind kind = sh.objKind(obj);
-    switch (kind) {
-        case OK_SLS:
-            // already abstract, check the next pointer
-            if (sh.objBinding(obj) == bf)
-                // all OK
-                return;
-            // fall through!
 
-        default:
-            SE_TRAP;
-            // fall through!
-
-        case OK_CONCRETE:
-            break;
-    }
-
-    // abstract a concrete object
-    sh.objSetAbstract(obj, OK_SLS, bf);
-
-    // we're constructing the abstract object from a concrete one
-    // --> it implies non-empty LS at this point
-    const TValueId headAddr = segHeadAddr(sh, obj);
-    const TValueId valNext = sh.valueOf(subObjByChain(sh, obj, bf.next));
-    sh.neqOp(SymHeap::NEQ_ADD, headAddr, valNext);
-}
-
-void slSegAbstractionStep(SymHeap &sh, TObjId *pObj, const SegBindingFields &bf,
-                          bool flatScan)
-{
-    const TObjId objPtrNext = subObjByChain(sh, *pObj, bf.next);
+    const TObjId objPtrNext = subObjByChain(sh, obj, bf.next);
     const TValueId valNext = sh.valueOf(objPtrNext);
 
-    // check for a failure of segDiscover()
+    // check for a failure of segDiscover() -- FIXME: too strict
     SE_BREAK_IF(valNext <= 0 || 1 != sh.usedByCount(valNext));
 
-    // make sure the next object is abstract
+    // jump to the next object
     const TObjId objNext = subObjByInvChain(sh, sh.pointsTo(valNext), bf.head);
-    slSegCreateIfNeeded(sh, objNext, bf);
-    SE_BREAK_IF(OK_SLS != sh.objKind(objNext));
+    const EObjKind kindNext = sh.objKind(objNext);
+    SE_BREAK_IF(OK_SLS == kindNext && bf != sh.objBinding(objNext));
+
+    // check if at least one object is concrete
+    // FIXME: more precise would be to check also the already defined Neq preds
+    const bool ne = (OK_CONCRETE == kind || OK_CONCRETE == kindNext);
+
+    if (OK_CONCRETE == kindNext)
+        // abstract the _next_ object
+        sh.objSetAbstract(objNext, OK_SLS, bf);
 
     // merge data
-    abstractNonMatchingValues(sh, *pObj, objNext, flatScan);
+    SE_BREAK_IF(OK_SLS != sh.objKind(objNext));
+    abstractNonMatchingValues(sh, obj, objNext);
 
     // replace all references to 'head'
     const TFieldIdxChain icHead = sh.objBinding(objNext).head;
-    const TObjId head = subObjByChain(sh, *pObj, icHead);
+    const TObjId head = subObjByChain(sh, obj, icHead);
     sh.valReplace(sh.placedAt(head), segHeadAddr(sh, objNext));
 
     // replace self by the next object
-    objReplace(sh, *pObj, objNext);
+    objReplace(sh, obj, objNext);
+
+    if (ne)
+        // we're constructing the abstract object from a concrete one
+        // --> it implies non-empty LS at this point
+        segSetMinLength(sh, objNext, /* SLS 1+ */ 1);
 
     // move to the next object
     *pObj = objNext;
 }
 
-void dlSegCreate(SymHeap &sh, TObjId o1, TObjId o2, SegBindingFields bf,
-                 bool flatScan)
-{
+void dlSegCreate(SymHeap &sh, TObjId o1, TObjId o2, SegBindingFields bf) {
     // validate call of dlSegCreate()
     SE_BREAK_IF(OK_CONCRETE != sh.objKind(o1) || OK_CONCRETE != sh.objKind(o2));
 
@@ -883,30 +583,25 @@ void dlSegCreate(SymHeap &sh, TObjId o1, TObjId o2, SegBindingFields bf,
     sh.objSetAbstract(o2, OK_DLS, bf);
 
     // introduce some UV_UNKNOWN values if necessary
-    abstractNonMatchingValues(sh, o1, o2, flatScan, /* bidir */ true,
-                              /* fresh */ true);
+    abstractNonMatchingValues(sh, o1, o2, /* bidir */ true);
 
     // a just created DLS is said to be 2+
-    const TValueId a1 = segHeadAddr(sh, o1);
-    const TValueId a2 = segHeadAddr(sh, o2);
-    sh.neqOp(SymHeap::NEQ_ADD, a1, a2);
+    dlSegSetMinLength(sh, o1, /* DLS 2+ */ 2);
 }
 
-void dlSegGobble(SymHeap &sh, TObjId dls, TObjId var, bool backward,
-                 bool flatScan)
-{
+void dlSegGobble(SymHeap &sh, TObjId dls, TObjId var, bool backward) {
     SE_BREAK_IF(OK_DLS != sh.objKind(dls) || OK_CONCRETE != sh.objKind(var));
 
-    // kill Neq if any
-    // TODO: we may distinguish among 1+/2+ at this point
-    dlSegHandleCrossNeq(sh, dls, SymHeap::NEQ_DEL);
+    // handle DLS Neq predicates
+    const unsigned len = dlSegMinLength(sh, dls) + /* OK_CONCRETE */ 1;
+    dlSegSetMinLength(sh, dls, /* DLS 0+ */ 0);
 
     if (!backward)
         // jump to peer
         dls = dlSegPeer(sh, dls);
 
     // introduce some UV_UNKNOWN values if necessary
-    abstractNonMatchingValues(sh, var, dls, flatScan);
+    abstractNonMatchingValues(sh, var, dls);
 
     // store the pointer DLS -> VAR
     const SegBindingFields &bf = sh.objBinding(dls);
@@ -919,19 +614,15 @@ void dlSegGobble(SymHeap &sh, TObjId dls, TObjId var, bool backward,
     sh.valReplace(sh.placedAt(varHead), segHeadAddr(sh, dls));
     objReplace(sh, var, dls);
 
-    // we've just added an object, the DLS can't be empty
-    dlSegHandleCrossNeq(sh, dls, SymHeap::NEQ_ADD);
+    // handle DLS Neq predicates
+    dlSegSetMinLength(sh, dls, len);
 }
 
-void dlSegMerge(SymHeap &sh, TObjId seg1, TObjId seg2, bool flatScan) {
-    // the resulting DLS will be non-empty as long as at least one of the given
-    // DLS is non-empty
-    const bool ne = dlSegNotEmpty(sh, seg1) || dlSegNotEmpty(sh, seg2);
-    if (ne) {
-        // TODO: we may distinguish among 1+/2+ at this point
-        dlSegHandleCrossNeq(sh, seg1, SymHeap::NEQ_DEL);
-        dlSegHandleCrossNeq(sh, seg2, SymHeap::NEQ_DEL);
-    }
+void dlSegMerge(SymHeap &sh, TObjId seg1, TObjId seg2) {
+    // handle DLS Neq predicates
+    const unsigned len = dlSegMinLength(sh, seg1) + dlSegMinLength(sh, seg2);
+    dlSegSetMinLength(sh, seg1, /* DLS 0+ */ 0);
+    dlSegSetMinLength(sh, seg2, /* DLS 0+ */ 0);
 
     // check for a failure of segDiscover()
     SE_BREAK_IF(sh.objBinding(seg1) != sh.objBinding(seg2));
@@ -946,8 +637,8 @@ void dlSegMerge(SymHeap &sh, TObjId seg1, TObjId seg2, bool flatScan) {
     const TObjId peer2 = dlSegPeer(sh, seg2);
 
     // introduce some UV_UNKNOWN values if necessary
-    abstractNonMatchingValues(sh,  seg1,  seg2, flatScan, /* bidir */ true);
-    abstractNonMatchingValues(sh, peer1, peer2, flatScan, /* bidir */ true);
+    abstractNonMatchingValues(sh,  seg1,  seg2, /* bidir */ true);
+    abstractNonMatchingValues(sh, peer1, peer2, /* bidir */ true);
 
     // preserve backLink
     const TValueId valNext2 = sh.valueOf(nextPtrFromSeg(sh, seg1));
@@ -961,13 +652,12 @@ void dlSegMerge(SymHeap &sh, TObjId seg1, TObjId seg2, bool flatScan) {
     objReplace(sh,  seg1,  seg2);
     objReplace(sh, peer1, peer2);
 
-    if (ne)
-        // non-empty DLS
-        dlSegHandleCrossNeq(sh, seg2, SymHeap::NEQ_ADD);
+    if (len)
+        // handle DLS Neq predicates
+        dlSegSetMinLength(sh, seg2, len);
 }
 
-void dlSegAbstractionStep(SymHeap &sh, TObjId *pObj, const SegBindingFields &bf,
-                          bool flatScan)
+void dlSegAbstractionStep(SymHeap &sh, TObjId *pObj, const SegBindingFields &bf)
 {
     // the first object is clear
     const TObjId o1 = *pObj;
@@ -991,12 +681,12 @@ void dlSegAbstractionStep(SymHeap &sh, TObjId *pObj, const SegBindingFields &bf,
             skipObj(sh, &o2, sh.objBinding(o2).head, sh.objBinding(o2).next);
             if (OK_CONCRETE == sh.objKind(o2)) {
                 // DLS + VAR
-                dlSegGobble(sh, o1, o2, /* backward */ false, flatScan);
+                dlSegGobble(sh, o1, o2, /* backward */ false);
                 return;
             }
 
             // DLS + DLS
-            dlSegMerge(sh, o1, o2, flatScan);
+            dlSegMerge(sh, o1, o2);
             break;
 
         case OK_CONCRETE:
@@ -1004,12 +694,12 @@ void dlSegAbstractionStep(SymHeap &sh, TObjId *pObj, const SegBindingFields &bf,
             skipObj(sh, &o2, bf.head, bf.next);
             if (OK_CONCRETE == sh.objKind(o2)) {
                 // VAR + VAR
-                dlSegCreate(sh, o1, o2, bf, flatScan);
+                dlSegCreate(sh, o1, o2, bf);
                 return;
             }
 
             // VAR + DLS
-            dlSegGobble(sh, o2, o1, /* backward */ true, flatScan);
+            dlSegGobble(sh, o2, o1, /* backward */ true);
             break;
     }
 
@@ -1018,215 +708,549 @@ void dlSegAbstractionStep(SymHeap &sh, TObjId *pObj, const SegBindingFields &bf,
 
 #if SE_SELF_TEST
     // just check if the Neq predicates work well so far
-    dlSegNotEmpty(sh, o2);
+    dlSegMinLength(sh, o2);
 #endif
 }
 
-bool considerSegAbstraction(SymHeap &sh, TObjId obj, EObjKind kind,
-                            const SegBindingFields &bf, unsigned lenTotal,
-                            bool flatScan)
+bool considerAbstraction(SymHeap                    &sh,
+                         const SegBindingFields     &bf,
+                         const TObjId               entry,
+                         const unsigned             len)
 {
-    // select the appropriate threshold for the given type of abstraction
-    AbstractionThreshold at = slsThreshold;
-    switch (kind) {
-        case OK_CONCRETE:
-        case OK_HEAD:
-        case OK_PART:
-            // invalid call of considerSegAbstraction()
-            SE_TRAP;
-            return false;
-
-        case OK_SLS:
-            // at == slsThreshold
-            break;
-
-        case OK_DLS:
-            at = dlsThreshold;
-            break;
-    }
+    const bool isSls = bf.peer.empty();
+    const AbstractionThreshold &at = (isSls)
+        ? slsThreshold
+        : dlsThreshold;
 
     // check whether the threshold is satisfied or not
     unsigned threshold = at.sparePrefix + at.innerSegLen + at.spareSuffix;
-    if (flatScan) {
-        CL_DEBUG("    FFF ignoring threshold cfg during flat scan!");
-        threshold = 1;
-    }
-
-    if (lenTotal < threshold) {
-        CL_DEBUG("<-- length (" << lenTotal
+    if (len < threshold) {
+        CL_DEBUG("<-- length (" << len
                 << ") of the longest segment is under the threshold ("
                 << threshold << ")");
         return false;
     }
 
-    int len = lenTotal;
-    if (!flatScan) {
-        CL_DEBUG("    --- length of the longest segment is " << lenTotal
-                << ", prefix=" << at.sparePrefix
-                << ", suffix=" << at.spareSuffix);
+    // cursor
+    TObjId obj = entry;
 
-        // handle sparePrefix/spareSuffix
-        len = lenTotal - at.sparePrefix - at.spareSuffix;
-        for (unsigned i = 0; i < at.sparePrefix; ++i)
-            skipObj(sh, &obj, bf.head, bf.next);
-    }
-
-    CL_DEBUG("    AAA initiating abstraction of length " << len);
-
-    if (OK_SLS == kind) {
+    if (isSls) {
         // perform SLS abstraction!
-        for (int i = 0; i < len; ++i)
-            slSegAbstractionStep(sh, &obj, bf, flatScan);
+        CL_DEBUG("    AAA initiating SLS abstraction of length " << len);
+        debugPlotInit("SLS");
+        debugPlot(sh);
+
+        for (unsigned i = 0; i < len; ++i) {
+            slSegAbstractionStep(sh, &obj, bf);
+            debugPlot(sh);
+        }
 
         CL_DEBUG("<-- successfully abstracted SLS");
         return true;
     }
     else {
         // perform DLS abstraction!
-        for (int i = 0; i < len; ++i)
-            dlSegAbstractionStep(sh, &obj, bf, flatScan);
+        CL_DEBUG("    AAA initiating DLS abstraction of length " << len);
+        debugPlotInit("DLS");
+        debugPlot(sh);
+
+        for (unsigned i = 0; i < len; ++i) {
+            dlSegAbstractionStep(sh, &obj, bf);
+            debugPlot(sh);
+        }
 
         CL_DEBUG("<-- successfully abstracted DLS");
         return true;
     }
 }
 
-template <class TCont, class TContHeads>
-bool considerAbstraction(SymHeap &sh, EObjKind kind, TCont entries,
-                         TContHeads heads, bool flatScan = false)
+bool matchSegBinding(const SymHeap              &sh,
+                     const TObjId               obj,
+                     const SegBindingFields     &bfDiscover)
 {
-    switch (kind) {
-        case OK_CONCRETE:
-        case OK_HEAD:
-        case OK_PART:
-            // invalid call of considerAbstraction()
-            SE_TRAP;
+    const EObjKind kind = sh.objKind(obj);
+    if (OK_CONCRETE == kind)
+        // nothing to match actually
+        return true;
 
+    const SegBindingFields bf = sh.objBinding(obj);
+    if (bf.head != bfDiscover.head)
+        // head mismatch
+        return false;
+
+    switch (kind) {
         case OK_SLS:
-            CL_DEBUG("--> considering SLS abstraction...");
-            break;
+            return (bf.next == bfDiscover.next);
 
         case OK_DLS:
-            CL_DEBUG("--> considering DLS abstraction...");
-            break;
+            return (bf.next == bfDiscover.peer)
+                && (bf.peer == bfDiscover.next);
+
+        default:
+            // TODO
+            SE_TRAP;
+            return false;
     }
+}
 
-    // go through all candidates and find the best possible abstraction
-    SegBindingFields bestBf;
-#if SE_SELF_TEST
-    TObjId bestEntry;
-#else
-    TObjId bestEntry = OBJ_INVALID;
-#endif
-    unsigned bestLen = 0;
+bool preserveHeadPtr(const SymHeap                &sh,
+                     const SegBindingFields       &bf,
+                     const TObjId                 obj)
+{
+    const TValueId valPrev = sh.valueOf(subObjByChain(sh, obj, bf.peer));
+    const TValueId valNext = sh.valueOf(subObjByChain(sh, obj, bf.next));
+    if (valPrev <= 0 && valNext <= 0)
+        // no valid address anyway
+        return false;
 
-    // check how many candidates did we get
-    const unsigned cnt = entries.size();
-    SE_BREAK_IF(heads.size() != cnt);
+    // FIXME: should we utilize the prover instead?
+    if (valPrev == valNext)
+        // keep DLS Neq predicates going
+        return true;
 
-    for (unsigned i = 0; i < cnt; ++i) {
-        const TObjId obj = entries[i];
-        const TFieldIdxChain icHead = heads[i];
+    const TValueId addrHead = sh.placedAt(subObjByChain(sh, obj, bf.head));
+    if (valPrev == addrHead || valNext == addrHead)
+        // head pointer detected
+        return true;
 
-        // gather suitable selectors
-        std::vector<TFieldIdxChain> selectors;
-        digAnyListSelectors(selectors, sh, obj, kind, icHead);
+    const TValueId addrRoot = sh.placedAt(obj);
+    if (valPrev == addrRoot || valNext == addrHead)
+        // root pointer detected
+        return true;
 
-        // run the LS discovering process
-        SegBindingFields bf;
-        bf.head = icHead;
-        const unsigned len = segDiscoverAll(sh, obj, kind, selectors,
-                                            icHead, &bf.next, &bf.peer);
+    // found nothing harmful
+    return false;
+}
 
-        if (len <= bestLen)
+class PointingObjectsFinder {
+    SymHeap::TContObj &dst_;
+
+    public:
+        PointingObjectsFinder(SymHeap::TContObj &dst): dst_(dst) { }
+
+        bool operator()(const SymHeap &sh, TObjId obj) const {
+            const TValueId addr = sh.placedAt(obj);
+            SE_BREAK_IF(addr <= 0);
+
+            sh.usedBy(dst_, addr);
+            return /* continue */ true;
+        }
+};
+
+bool validateSinglePointingObject(const SymHeap             &sh,
+                                  const SegBindingFields    &bf,
+                                  const TObjId              obj,
+                                  const TObjId              prev,
+                                  const TObjId              next)
+{
+    if (obj == subObjByChain(sh, prev, bf.next))
+        return true;
+
+    const bool isDls = !bf.peer.empty();
+    if (isDls && obj == subObjByChain(sh, next, bf.peer))
+        return true;
+
+    // TODO
+    return false;
+}
+
+bool validatePointingObjects(const SymHeap              &sh,
+                             const SegBindingFields     &bf,
+                             const TObjId               root,
+                             TObjId                     prev,
+                             TObjId                     next,
+                             const bool                 toInsideOnly = false)
+{
+    TObjId peerPtr = OBJ_INVALID;
+    if (OK_DLS == sh.objKind(root))
+        // retrieve peer's pointer to this object (if any)
+        peerPtr = peerPtrFromSeg(sh, dlSegPeer(sh, root));
+
+    if (OK_DLS == sh.objKind(prev))
+        // jump to peer in case of DLS
+        prev = dlSegPeer(sh, prev);
+
+    // collect all object pointing at/inside the object
+    SymHeap::TContObj refs;
+    const PointingObjectsFinder visitor(refs);
+
+    if (!toInsideOnly)
+        visitor(sh, root);
+
+    traverseSubObjs(sh, root, visitor, /* leavesOnly */ false);
+
+    BOOST_FOREACH(const TObjId obj, refs) {
+        if (validateSinglePointingObject(sh, bf, obj, prev, next))
             continue;
 
-        bestLen     = len;
-        bestEntry   = obj;
-        bestBf      = bf;
-    }
-    if (!bestLen) {
-        CL_DEBUG("<-- nothing useful found");
+        SE_BREAK_IF(OBJ_INVALID == obj);
+        if (obj == peerPtr)
+            continue;
+
+        // someone points at/inside who should not
         return false;
     }
 
-    // consider abstraction threshold and trigger the abstraction eventually
-    return considerSegAbstraction(sh, bestEntry, kind, bestBf, bestLen,
-                                  flatScan);
+    // no problems encountered
+    return true;
 }
 
-void flatScan(SymHeap &sh, EObjKind kind, TObjId obj) {
-    std::vector<TFieldIdxChain> heads;
-    probe(heads, sh, obj, kind);
-
-    SymHeapCore::TContObj cont;
-    BOOST_FOREACH(const TFieldIdxChain icHead, heads) {
-        cont.push_back(obj);
+TObjId jumpToNextObj(const SymHeap              &sh,
+                     const SegBindingFields     &bf,
+                     std::set<TObjId>           &haveSeen,
+                     TObjId                     obj)
+{
+    const bool dlSegOnPath = (OK_DLS == sh.objKind(obj));
+    if (dlSegOnPath) {
+        // jump to peer in case of DLS
+        obj = dlSegPeer(sh, obj);
+        haveSeen.insert(obj);
     }
 
-    considerAbstraction(sh, kind, cont, heads, /* flatScan */ true);
+    const struct cl_type *clt = sh.objType(obj);
+    const TObjId nextPtr = subObjByChain(sh, obj, bf.next);
+    SE_BREAK_IF(nextPtr <= 0);
+
+    const TObjId nextHead = sh.pointsTo(sh.valueOf(nextPtr));
+    if (nextHead <= 0)
+        // no head pointed by nextPtr
+        return OBJ_INVALID;
+
+    const TObjId next = subObjByInvChain(sh, nextHead, bf.head);
+    if (next <= 0)
+        // no suitable next object
+        return OBJ_INVALID;
+
+    const struct cl_type *cltNext = sh.objType(next);
+    if (!cltNext || *cltNext != *clt)
+        // type mismatch
+        return OBJ_INVALID;
+
+    if (!matchSegBinding(sh, next, bf))
+        // binding mismatch
+        return OBJ_INVALID;
+
+    if (preserveHeadPtr(sh, bf, next))
+        // special quirk for head pointers
+        return OBJ_INVALID;
+
+    const bool isDls = !bf.peer.empty();
+    if (isDls) {
+        // check DLS back-link
+        const TObjId prevPtr = subObjByChain(sh, next, bf.peer);
+        const TObjId head = subObjByChain(sh, obj, bf.head);
+        if (sh.valueOf(prevPtr) != sh.placedAt(head))
+            // DLS back-link mismatch
+            return OBJ_INVALID;
+    }
+
+    if (dlSegOnPath
+            && !validatePointingObjects(sh, bf, obj, /* prev */ obj, next))
+        // never step over a peer object that is pointed from outside!
+        return OBJ_INVALID;
+
+    return next;
 }
 
-template <class TDst>
-void digAnyListHeads(TDst &heads, const SymHeap &sh, TObjId obj,
-                     EObjKind kind)
+bool matchData(const SymHeap                &sh,
+               const SegBindingFields       &bf,
+               const TObjId                 o1,
+               const TObjId                 o2)
 {
-    if (sh.cVar(0, obj))
-        // skip static/automatic objects
+    DataMatchVisitor visitor;
+    const TObjId nextPtr = subObjByChain(sh, o1, bf.next);
+    visitor.ignoreList.insert(nextPtr);
+
+    if (!bf.peer.empty()) {
+        const TObjId prevPtr = subObjByChain(sh, o1, bf.peer);
+        visitor.ignoreList.insert(prevPtr);
+    }
+
+    const TObjPair item(o1, o2);
+    return traverseSubObjs(sh, item, visitor, /* leavesOnly */ true);
+}
+
+bool slSegAvoidSelfCycle(const SymHeap &sh, const TObjId o1, const TObjId o2) {
+    const TValueId v1 = sh.placedAt(o1);
+    const TValueId v2 = sh.placedAt(o2);
+
+    return haveSeg(sh, v1, v2, OK_SLS)
+        || haveSeg(sh, v2, v1, OK_SLS);
+}
+
+unsigned /* len */ segDiscover(const SymHeap            &sh,
+                               const SegBindingFields   &bf,
+                               const TObjId             entry)
+{
+    if (preserveHeadPtr(sh, bf, entry))
+        // special quirk for head pointers
+        return 0;
+
+    // we use std::set to detect loops
+    std::set<TObjId> haveSeen;
+    haveSeen.insert(entry);
+    TObjId prev = entry;
+
+    const bool isDls = !bf.peer.empty();
+    if (isDls) {
+        // avoid DLS self-loop
+        const TObjId prevPtr = subObjByChain(sh, entry, bf.peer);
+        TObjId prev = sh.pointsTo(sh.valueOf(prevPtr));
+        prev = subObjByInvChain(sh, prev, bf.head);
+        if (0 < prev) {
+            haveSeen.insert(prev);
+            if (OK_DLS == sh.objKind(prev))
+                haveSeen.insert(dlSegPeer(sh, prev));
+        }
+    }
+
+    TObjId obj = jumpToNextObj(sh, bf, haveSeen, entry);
+    if (hasKey(haveSeen, obj))
+        // loop detected
+        return 0;
+    else
+        haveSeen.insert(obj);
+
+    if (!validatePointingObjects(sh, bf, entry, OBJ_INVALID, obj,
+                                 /* toInsideOnly */ true))
+        // invalid entry
+        return 0;
+
+    std::vector<TObjId> path;
+
+    while (OBJ_INVALID != obj) {
+        // compare the data
+        if (!matchData(sh, bf, prev, obj)) {
+            CL_DEBUG("DataMatchVisitor refuses to create a segment!");
+            break;
+        }
+
+        // look ahead
+        TObjId next = jumpToNextObj(sh, bf, haveSeen, obj);
+        if (hasKey(haveSeen, next))
+            // loop detected
+            break;
+        else
+            haveSeen.insert(next);
+
+        if (!validatePointingObjects(sh, bf, obj, prev, next))
+            // someone points to inside who should not
+            break;
+
+        // enlarge the path by one
+        path.push_back(obj);
+        prev = obj;
+        obj = next;
+    }
+
+    if (path.empty())
+        // found nothing
+        return 0;
+
+    if (slSegAvoidSelfCycle(sh, entry, path.back()))
+        // avoid creating self-cycle of two SLS segments
+        return path.size() - 1;
+
+    return path.size();
+}
+
+bool digSegmentHead(TFieldIdxChain          &dst,
+                    const SymHeap           &sh,
+                    const struct cl_type    *cltRoot,
+                    TObjId                  obj)
+{
+    TFieldIdxChain invIc;
+    while (*cltRoot != *sh.objType(obj)) {
+        int nth;
+        obj = sh.objParent(obj, &nth);
+        if (OBJ_INVALID == obj)
+            // head not found
+            return false;
+
+        invIc.push_back(nth);
+    }
+
+    // head found, now reverse the index chain (if any)
+    dst.clear();
+    std::copy(invIc.rbegin(), invIc.rend(), std::back_inserter(dst));
+    return true;
+}
+
+struct PtrFinder {
+    TObjId              target;
+    TFieldIdxChain      icFound;
+
+    bool operator()(const SymHeap &sh, TObjId sub, TFieldIdxChain ic) {
+        const TValueId val = sh.valueOf(sub);
+        if (val <= 0)
+            return /* continue */ true;
+
+        const TObjId obj = sh.pointsTo(val);
+        if (obj != target)
+            return /* continue */ true;
+
+        // target found!
+        icFound = ic;
+        return /* break */ false;
+    }
+};
+
+void digBackLink(SegBindingFields           &bf,
+                 const SymHeap              &sh,
+                 const TObjId               next,
+                 TObjId                     root)
+{
+    PtrFinder visitor;
+    visitor.target = /* head */ subObjByChain(sh, root, bf.head);
+    if (traverseSubObjsIc(sh, next, visitor))
+        // not found
         return;
 
-    const TValueId addr = sh.placedAt(obj);
-    if (VAL_INVALID == addr)
-        return;
+    // join the idx chain with head
+    const TFieldIdxChain &fromHeadToBack = visitor.icFound;
+    bf.peer = bf.head;
+    std::copy(fromHeadToBack.begin(),
+              fromHeadToBack.end(),
+              std::back_inserter(bf.peer));
 
-    probe(heads, sh, obj, kind);
+    if (bf.peer == bf.next)
+        // next and prev pointers have to be two distinct pointers, withdraw it
+        bf.peer.clear();
+}
+
+typedef std::vector<SegBindingFields> TBindingCandidateList;
+
+class ProbeEntryVisitor {
+    private:
+        TBindingCandidateList   &dst_;
+        const TObjId            root_;
+        const struct cl_type    *clt_;
+
+    public:
+        ProbeEntryVisitor(TBindingCandidateList         &dst,
+                          const SymHeap                 &sh,
+                          const TObjId                  root):
+            dst_(dst),
+            root_(root),
+            clt_(sh.objType(root))
+        {
+            SE_BREAK_IF(!clt_);
+        }
+
+        bool operator()(const SymHeap &sh, TObjId sub, TFieldIdxChain ic) const
+        {
+            const TValueId val = sh.valueOf(sub);
+            if (val <= 0)
+                return /* continue */ true;
+
+            const TObjId next = sh.pointsTo(val);
+            if (next <= 0)
+                return /* continue */ true;
+
+            if (!isComposite(sh.objType(next)))
+                // we take only composite types in case of segment head for now
+                return /* continue */ true;
+
+            SegBindingFields bf;
+            if (!digSegmentHead(bf.head, sh, clt_, next))
+                return /* continue */ true;
+
+            // entry candidate found, check the back-link in case of DLL
+            bf.next = ic;
+#if !SE_DISABLE_DLS
+            digBackLink(bf, sh, next, root_);
+#endif
+
+#if SE_DISABLE_SLS
+            // allow only DLS abstraction
+            if (bf.peer.empty())
+                return /* continue */ true;
+#endif
+
+            // append a candidate
+            dst_.push_back(bf);
+            return /* continue */ true;
+        }
+};
+
+struct SegCandidate {
+    TObjId                      entry;
+    TBindingCandidateList       bfs;
+};
+
+typedef std::vector<SegCandidate> TSegCandidateList;
+
+bool performBestAbstraction(SymHeap &sh, const TSegCandidateList &candidates)
+{
+    const unsigned cnt = candidates.size();
+    if (!cnt)
+        // no candidates given
+        return false;
+
+    CL_DEBUG("--> initiating segment discovery, "
+            << cnt << " entry candidate(s) given");
+
+    // go through entry candidates
+    unsigned            bestLen = 0;
+    unsigned            bestIdx = 0;
+    SegBindingFields    bestBinding;
+
+    for (unsigned idx = 0; idx < cnt; ++idx) {
+
+        // go through binding candidates
+        const SegCandidate &segc = candidates[idx];
+        BOOST_FOREACH(const SegBindingFields &bf, segc.bfs) {
+            const unsigned len = segDiscover(sh, bf, segc.entry);
+            if (len <= bestLen)
+                continue;
+
+            // update best candidate
+            bestIdx = idx;
+            bestLen = len;
+            bestBinding = bf;
+        }
+    }
+
+    if (!bestLen) {
+        CL_DEBUG("<-- no new segment found");
+        return false;
+    }
+
+    // pick up the best candidate
+    const SegCandidate &segc = candidates[bestIdx];
+    return considerAbstraction(sh, bestBinding, segc.entry, bestLen);
 }
 
 bool abstractIfNeededCore(SymHeap &sh) {
-    SymHeapCore::TContObj slSegEntries;
-    SymHeapCore::TContObj dlSegEntries;
+    TSegCandidateList candidates;
 
-    std::vector<TFieldIdxChain> slSegHeads;
-    std::vector<TFieldIdxChain> dlSegHeads;
-
-    // collect all possible SLS/DLS entries
+    // go through all potential segment entries
     SymHeapCore::TContObj roots;
     sh.gatherRootObjs(roots);
     BOOST_FOREACH(const TObjId obj, roots) {
-        // look for SLS heads
-        std::vector<TFieldIdxChain> heads;
-        (void) heads;
+        if (sh.cVar(0, obj))
+            // skip static/automatic objects
+            continue;
 
-#if !SE_DISABLE_SLS
-        digAnyListHeads(heads, sh, obj, OK_SLS);
-        BOOST_FOREACH(const TFieldIdxChain icHead, heads) {
-            slSegEntries.push_back(obj);
-            slSegHeads.push_back(icHead);
-        }
+        const TValueId addr = sh.placedAt(obj);
+        if (VAL_INVALID == addr)
+            // no valid object anyway
+            continue;
 
-        // look for DLS heads
-        heads.clear();
-#endif
-#if !SE_DISABLE_DLS
-        digAnyListHeads(heads, sh, obj, OK_DLS);
-        BOOST_FOREACH(const TFieldIdxChain icHead, heads) {
-            dlSegEntries.push_back(obj);
-            dlSegHeads.push_back(icHead);
-        }
-#endif
+        // use ProbeEntryVisitor visitor to validate the potential segment entry
+        SegCandidate segc;
+        const ProbeEntryVisitor visitor(segc.bfs, sh, obj);
+        traverseSubObjsIc(sh, obj, visitor);
+        if (segc.bfs.empty())
+            // found nothing
+            continue;
+
+        // append a segment candidate
+        segc.entry = obj;
+        candidates.push_back(segc);
     }
 
-    // TODO: check if the order of following two steps is anyhow important
-    if (!slSegEntries.empty()
-            && considerAbstraction(sh, OK_SLS, slSegEntries, slSegHeads))
-        return true;
-
-    if (!dlSegEntries.empty()
-            && considerAbstraction(sh, OK_DLS, dlSegEntries, dlSegHeads))
-        return true;
-
-    // no hit
-    return false;
+    return performBestAbstraction(sh, candidates);
 }
 
 void segReplaceRefs(SymHeap &sh, TValueId valOld, TValueId valNew) {
@@ -1296,8 +1320,11 @@ void segReplaceRefs(SymHeap &sh, TValueId valOld, TValueId valNew) {
 }
 
 bool dlSegReplaceByConcrete(SymHeap &sh, TObjId obj, TObjId peer) {
+    debugPlotInit("dlSegReplaceByConcrete");
+    debugPlot(sh);
+
     // first kill any related Neq predicates, we're going to concretize anyway
-    dlSegHandleCrossNeq(sh, obj, SymHeap::NEQ_DEL);
+    dlSegSetMinLength(sh, obj, /* DLS 0+ */ 0);
 
     // take the value of 'next' pointer from peer
     const TFieldIdxChain icPeer = sh.objBinding(obj).peer;
@@ -1315,10 +1342,14 @@ bool dlSegReplaceByConcrete(SymHeap &sh, TObjId obj, TObjId peer) {
     sh.objSetConcrete(obj);
 
     // this can't fail (at least I hope so...)
+    debugPlot(sh);
     return true;
 }
 
 void spliceOutListSegmentCore(SymHeap &sh, TObjId obj, TObjId peer) {
+    debugPlotInit("spliceOutListSegmentCore");
+    debugPlot(sh);
+
     const TObjId next = nextPtrFromSeg(sh, peer);
     const TValueId valNext = sh.valueOf(next);
 
@@ -1333,30 +1364,31 @@ void spliceOutListSegmentCore(SymHeap &sh, TObjId obj, TObjId peer) {
     // destroy self
     segReplaceRefs(sh, segHeadAddr(sh, obj), valNext);
     sh.objDestroy(obj);
+
+    debugPlot(sh);
 }
 
-void spliceOutSegmentIfNeeded(SymHeap &sh, TObjId ao, TObjId peer,
-                              TSymHeapList &todo)
+unsigned /* len */ spliceOutSegmentIfNeeded(SymHeap &sh, TObjId ao, TObjId peer,
+                                            TSymHeapList &todo)
 {
-    // check if the LS may be empty
-    if (segNotEmpty(sh, ao)) {
-        // the segment was _guaranteed_ to be non-empty now, but the
-        // concretization makes it _possibly_ empty --> remove the Neq predicate 
-        const TObjId next = nextPtrFromSeg(sh, peer);
-        const TValueId nextVal = sh.valueOf(next);
-        const TValueId headAddr = segHeadAddr(sh, ao);
+    const unsigned len = segMinLength(sh, ao);
+    if (len) {
+        debugPlotInit("spliceOutSegmentIfNeeded");
+        debugPlot(sh);
 
-        sh.neqOp(SymHeap::NEQ_DEL, headAddr, nextVal); 
-        return;
+        // drop any existing Neq predicates
+        segSetMinLength(sh, ao, 0);
+
+        debugPlot(sh);
+        return len - 1;
     }
 
     // possibly empty LS
     SymHeap sh0(sh);
     spliceOutListSegmentCore(sh0, ao, peer);
     todo.push_back(sh0);
+    return /* LS 0+ */ 0;
 }
-
-} // namespace
 
 void abstractIfNeeded(SymHeap &sh) {
 #if SE_DISABLE_SLS && SE_DISABLE_DLS
@@ -1395,7 +1427,10 @@ void concretizeObj(SymHeap &sh, TValueId addr, TSymHeapList &todo) {
     }
 
     // handle the possibly empty variant (if exists)
-    spliceOutSegmentIfNeeded(sh, obj, peer, todo);
+    const unsigned lenRemains = spliceOutSegmentIfNeeded(sh, obj, peer, todo);
+
+    debugPlotInit("concretizeObj");
+    debugPlot(sh);
 
     // duplicate self as abstract object
     const TObjId aoDup = sh.objDup(obj);
@@ -1424,6 +1459,10 @@ void concretizeObj(SymHeap &sh, TValueId addr, TSymHeapList &todo) {
         const TValueId headAddr = sh.placedAt(subObjByChain(sh, obj, bf.head));
         sh.objSetValue(backLink, headAddr);
     }
+
+    segSetMinLength(sh, aoDup, lenRemains);
+
+    debugPlot(sh);
 }
 
 bool spliceOutListSegment(SymHeap &sh, TValueId atAddr, TValueId pointingTo)

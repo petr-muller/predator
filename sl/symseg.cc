@@ -31,6 +31,13 @@ TObjId nextPtrFromSeg(const SymHeap &sh, TObjId seg) {
     return subObjByChain(sh, seg, icNext);
 }
 
+TObjId peerPtrFromSeg(const SymHeap &sh, TObjId seg) {
+    SE_BREAK_IF(OK_DLS != sh.objKind(seg));
+
+    const TFieldIdxChain icPeer = sh.objBinding(seg).peer;
+    return subObjByChain(sh, seg, icPeer);
+}
+
 TObjId dlSegPeer(const SymHeap &sh, TObjId dls) {
     // validate call of dlSegPeer()
     const TObjId root = objRoot(sh, dls);
@@ -55,7 +62,7 @@ namespace {
     }
 }
 
-bool dlSegNotEmpty(const SymHeap &sh, TObjId dls) {
+unsigned dlSegMinLength(const SymHeap &sh, TObjId dls) {
     // validate call of dlSegNotEmpty()
     SE_BREAK_IF(OK_DLS != sh.objKind(dls));
 
@@ -72,22 +79,23 @@ bool dlSegNotEmpty(const SymHeap &sh, TObjId dls) {
     // attempt to prove both
     const bool ne1 = segProveNeq(sh, val1, segHeadAddr(sh, peer));
     const bool ne2 = segProveNeq(sh, val2, segHeadAddr(sh, dls));
-    if (ne1 && ne2)
-        return /* not empty */ true;
 
-#if SE_SELF_TEST
-    if (!ne1 && !ne2)
-        return /* possibly empty */ false;
+    // DLS cross Neq predicates have to be fully symmetric
+    SE_BREAK_IF(ne1 != ne2);
+    const bool ne = (ne1 && ne2);
 
-    // the given DLS is guaranteed to be non empty in one direction, but not
-    // vice versa --> such a DLS is considered as mutant and should not be
-    // passed through
-    SE_TRAP;
-#endif
-    return false;
+    // if DLS heads are two distinct objects, we have at least two objects
+    const TValueId head1 = segHeadAddr(sh, dls);
+    const TValueId head2 = segHeadAddr(sh, peer);
+    if (segProveNeq(sh, head1, head2)) {
+        SE_BREAK_IF(!ne);
+        return /* DLS 2+ */ 2;
+    }
+
+    return static_cast<unsigned>(ne);
 }
 
-bool segNotEmpty(const SymHeap &sh, TObjId seg) {
+unsigned segMinLength(const SymHeap &sh, TObjId seg) {
     const EObjKind kind = sh.objKind(seg);
     switch (kind) {
         case OK_CONCRETE:
@@ -100,13 +108,13 @@ bool segNotEmpty(const SymHeap &sh, TObjId seg) {
             break;
 
         case OK_DLS:
-            return dlSegNotEmpty(sh, seg);
+            return dlSegMinLength(sh, seg);
     }
 
     const TObjId next = nextPtrFromSeg(sh, seg);
     const TValueId nextVal = sh.valueOf(next);
     const TValueId headAddr = segHeadAddr(sh, seg);
-    return /* not empty */ segProveNeq(sh, headAddr, nextVal);
+    return static_cast<unsigned>(segProveNeq(sh, headAddr, nextVal));
 }
 
 void segDestroy(SymHeap &sh, TObjId seg) {
@@ -127,24 +135,27 @@ void segDestroy(SymHeap &sh, TObjId seg) {
     }
 }
 
-
-bool haveDlSeg(const SymHeap &sh, TValueId atAddr, TValueId pointingTo) {
+bool haveSeg(const SymHeap &sh, TValueId atAddr, TValueId pointingTo,
+             const EObjKind kind)
+{
     if (UV_ABSTRACT != sh.valGetUnknown(atAddr))
         // not an abstract object
         return false;
 
-    const TObjId seg = objRoot(sh, sh.pointsTo(atAddr));
-    if (OK_DLS != sh.objKind(seg))
-        // not a DLS
+    TObjId seg = objRoot(sh, sh.pointsTo(atAddr));
+    if (kind != sh.objKind(seg))
+        // kind mismatch
         return false;
 
-    const TObjId peer = dlSegPeer(sh, seg);
-    if (OK_DLS != sh.objKind(peer))
-        // invalid peer
-        return false;
+    if (OK_DLS == kind) {
+        seg = dlSegPeer(sh, seg);
+        if (OK_DLS != sh.objKind(seg))
+            // invalid peer
+            return false;
+    }
 
     // compare the end-points
-    const TObjId nextPtr = nextPtrFromSeg(sh, peer);
+    const TObjId nextPtr = nextPtrFromSeg(sh, seg);
     const TValueId valNext = sh.valueOf(nextPtr);
     return (valNext == pointingTo);
 }

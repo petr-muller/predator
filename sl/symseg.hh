@@ -30,13 +30,14 @@
 #include "symutil.hh"
 
 /**
- * return true if there is a DLS (Doubly-linked List Segment) among the given
- * pair of values
+ * return true if there is a list segment among the given pair of values
  * @param sh an instance of symbolic heap
  * @param atAddr address of the heap object for consideration
  * @param pointingTo target address of the given potential list segment
+ * @param kind kind of list segment to look for
  */
-bool haveDlSeg(const SymHeap &sh, TValueId atAddr, TValueId pointingTo);
+bool haveSeg(const SymHeap &sh, TValueId atAddr, TValueId pointingTo,
+             const EObjKind kind);
 
 /**
  * return true if there is a DLS (Doubly-linked List Segment) among the given
@@ -50,14 +51,17 @@ bool haveDlSegAt(const SymHeap &sh, TValueId atAddr, TValueId peerAddr);
 /// return 'next' pointer of the given list segment as a heap object
 TObjId nextPtrFromSeg(const SymHeap &sh, TObjId seg);
 
+/// return 'peer' pointer of the given DLS
+TObjId peerPtrFromSeg(const SymHeap &sh, TObjId seg);
+
 /// return DLS peer object of the given DLS
 TObjId dlSegPeer(const SymHeap &sh, TObjId dls);
 
-/// return true if the given DLS is @b guaranteed to be non-empty
-bool dlSegNotEmpty(const SymHeap &sh, TObjId dls);
+/// return lower estimation of DLS length
+unsigned dlSegMinLength(const SymHeap &sh, TObjId dls);
 
-/// return true if the given list segment is @b guaranteed to be non-empty
-bool segNotEmpty(const SymHeap &sh, TObjId seg);
+/// return lower estimation of segment length
+unsigned segMinLength(const SymHeap &sh, TObjId seg);
 
 /// destroy the given list segment object (including DLS peer in case of DLS)
 void segDestroy(SymHeap &sh, TObjId seg);
