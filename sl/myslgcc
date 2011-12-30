@@ -1,0 +1,6 @@
+#!/bin/bash
+
+SL_PLOT=1 SVG_VIEWER=firefox ./slgcc $@
+read
+killall firefox
+rm -f *.svg *.dot
