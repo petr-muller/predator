@@ -1,6 +1,7 @@
 #!/bin/bash
 
-SL_PLOT=1 SVG_VIEWER=firefox ./slgcc $@
-read
+TMPOUT=`mktemp`
+SL_PLOT=1 SVG_VIEWER=firefox ./slgcc $@ &> $TMPOUT
+less $TMPOUT
 killall firefox
-rm -f *.svg *.dot
+rm -f *.svg *.dot $TMPOUT
