@@ -42,6 +42,12 @@ void segSetProto(SymHeap &sh, TValId seg, bool isProto) {
             sh.valTargetSetProto(seg, isProto);
             return;
 
+        case OK_TREE_BIN:
+            // Did not study this function, a guess for now.
+            // FIXME: [TREES] Implement correctly.
+            // TODO:  [TREES] Study this function.
+            return;
+
         case OK_CONCRETE:
             break;
     }

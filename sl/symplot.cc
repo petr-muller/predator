@@ -441,6 +441,12 @@ void plotInnerObjects(PlotData &plot, const TValId at, const TCont &liveObjs)
         case OK_SEE_THROUGH:
         case OK_SLS:
             next = nextPtrFromSeg(sh, at);
+            break;
+        case OK_TREE_BIN:
+            // Did not study this function, a guess for now.
+            // FIXME: [TREES] Implement correctly.
+            // TODO:  [TREES] Study this function.
+            next = nextPtrFromSeg(sh, at);
     }
 
     // sort objects by offset
@@ -498,6 +504,12 @@ std::string labelOfCompObj(const SymHeap &sh, const TValId root) {
         case OK_DLS:
             label += "DLS";
             break;
+        case OK_TREE_BIN:
+            // Did not study this function, a guess for now.
+            // FIXME: [TREES] Implement correctly.
+            // TODO:  [TREES] Study this function.
+            label += "TREE [bin]";
+            break;
     }
 
     // append minimal segment length
@@ -551,6 +563,14 @@ void plotCompositeObj(PlotData &plot, const TValId at, const TCont &liveObjs)
 
         case OK_DLS:
             color = "gold";
+            pw = "3.0";
+            break;
+
+        case OK_TREE_BIN:
+            // Did not study this function, a guess for now.
+            // FIXME: [TREES] Implement correctly.
+            // TODO:  [TREES] Study this function.
+            color = "cyan";
             pw = "3.0";
             break;
     }
@@ -666,6 +686,12 @@ void plotRootObjects(PlotData &plot) {
             case OK_SLS:
             case OK_SEE_THROUGH:
             case OK_OBJ_OR_NULL:
+                break;
+
+            case OK_TREE_BIN:
+                // Did not study this function, a guess for now.
+                // FIXME: [TREES] Implement correctly.
+                // TODO:  [TREES] Study this function.
                 break;
         }
 
