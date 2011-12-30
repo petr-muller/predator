@@ -711,6 +711,7 @@ struct BindingOff {
     TOffset head;           ///< target offset
     TOffset next;           ///< offset of the 'next' or 'r' pointer
     TOffset prev;           ///< offset of the 'prev' or 'l' pointer
+    //FIXME: [TREES] Will this need extending to allow parent pointers?
 
     BindingOff():
         head(0),
