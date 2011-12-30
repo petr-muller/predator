@@ -179,6 +179,15 @@ inline void buildIgnoreList(
             off = sh.segBinding(at).next;
             tmp = PtrHandle(writable, writable.valByOffset(at, off));
             ignoreList.insert(tmp);
+            break;
+        case OK_TREE_BIN:
+            // Did not study this function, a guess for now.
+            // FIXME: [TREES] Implement correctly.
+            // TODO:  [TREES] Study this function.
+            off = sh.segBinding(at).next;
+            tmp = PtrHandle(writable, writable.valByOffset(at, off));
+            ignoreList.insert(tmp);
+            break;
     }
 }
 
