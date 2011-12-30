@@ -152,7 +152,6 @@
  * if 1, do not use SLS (Singly-linked List Segment) abstraction
  */
 #define SE_DISABLE_SLS                      1
-
 /**
  * if 1, do not use tree abstractions
  */
