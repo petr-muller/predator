@@ -158,6 +158,11 @@
 #define SE_DISABLE_TREES                    0
 
 /**
+ * if 1, do not use tree abstractions
+ */
+#define SE_DISABLE_TREES                    0
+
+/**
  * if 1, do not use the @b symcut module at all
  */
 #define SE_DISABLE_SYMCUT                   0
