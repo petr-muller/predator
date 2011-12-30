@@ -502,14 +502,21 @@ class ProbeEntryVisitor {
             dst_(dst),
             root_(root)
         {
+            std::cout << "  >>> Visitor constructor (root=" << root << ")" << std::endl;
+            std::cout << "  <<< Visitor constructor (root=" << root << ")" << std::endl;
         }
 
         bool operator()(const ObjHandle &sub) const
         {
+            std::cout << "      >>> Visitor(sub=" << sub.objId() << ')' << std::endl;
             SymHeap &sh = *static_cast<SymHeap *>(sub.sh());
             const TValId next = sub.value();
-            if (!canWriteDataPtrAt(sh, next))
+            std::cout << "      Visitor::next = " << next << std::endl;
+            if (!canWriteDataPtrAt(sh, next)){
+                std::cout << "      canWriteDataPtrAt FAIL" << std::endl;
+                std::cout << "      <<< Visitor" << std::endl;
                 return /* continue */ true;
+            }
 
             // read head offset
             BindingOff off;
@@ -518,17 +525,25 @@ class ProbeEntryVisitor {
             // entry candidate found, check the back-link in case of DLL
             off.next = sh.valOffset(sub.placedAt());
             off.prev = off.next;
+            std::cout << "      Visitor::off(head=" << off.head << ", next=" << off.next << ", prev=" << off.prev << ')' << std::endl;
+            // [TREES] Somewhere around can be the first place to spot
+            // candidates for Tree abstraction. But most likely not.
+            // This just puts a candidate links (with possible backlinks)
+            // and do not track what for they are useful.
 #if !SE_DISABLE_DLS
             digBackLink(&off, sh, root_, next);
 #endif
 
 #if SE_DISABLE_SLS
             // allow only DLS abstraction
-            if (!isDlsBinding(off))
+            if (!isDlsBinding(off)){
+                std::cout << "      <<< Visitor" << std::endl;
                 return /* continue */ true;
+            }
 #endif
             // append a candidate
             dst_.push_back(off);
+            std::cout << "      <<< Visitor" << std::endl;
             return /* continue */ true;
         }
 };
@@ -637,6 +652,7 @@ unsigned /* len */ discoverBestAbstraction(
     // go through all potential segment entries
     TValList addrs;
     sh.gatherRootObjects(addrs, isOnHeap);
+    std::cout << ">>> discoverBestAbstraction""" << std::endl;
     BOOST_FOREACH(const TValId at, addrs) {
         // use ProbeEntryVisitor visitor to validate the potential segment entry
         SegCandidate segc;
@@ -650,6 +666,6 @@ unsigned /* len */ discoverBestAbstraction(
         segc.entry = at;
         candidates.push_back(segc);
     }
-
+    std::cout << "<<< discoverBestAbstraction""" << std::endl;
     return selectBestAbstraction(sh, candidates, off, entry);
 }

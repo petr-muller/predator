@@ -38,6 +38,7 @@
 
 #include <boost/foreach.hpp>
 #include <boost/static_assert.hpp>
+#include <iostream>
 
 inline TValId boolToVal(const bool b) {
     return (b)
@@ -239,6 +240,7 @@ bool /* complete */ traverseCore(
         TMethod                     method)
 {
     // check that we got a valid root object
+    std::cout << "    >>> traverseCore(at=" << at << ')' << std::endl;
     CL_BREAK_IF(!isPossibleToDeref(sh.valTarget(at)));
     const TValId rootAt = sh.valRoot(at);
     const TOffset offRoot = sh.valOffset(at);
@@ -246,6 +248,7 @@ bool /* complete */ traverseCore(
     ObjList objs;
     (sh.*method)(objs, rootAt);
     BOOST_FOREACH(const ObjHandle &obj, objs) {
+        std::cout << "    traverseCore(loop over objects=" << obj.objId() << ')' << std::endl;
         const TOffset off = sh.valOffset(obj.placedAt());
         if (off < offRoot)
             // do not go above the starting point
