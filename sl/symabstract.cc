@@ -542,6 +542,74 @@ bool /* jump next */ dlSegAbstractionStep(
     }
 }
 
+// FIXME: [TREES] Temporary tree-specific abstraction
+bool segTreeAbstractionStep(
+        SymHeap                     &sh,
+        const BindingOff            &off1,
+        const BindingOff            &off2,
+        TValId                      *pCursor)
+{
+  const TValId parent = *pCursor;
+  TValId peer = parent;
+  LDP_ENABLE(symabstract);
+  LDP_INIT(symabstract, "somewhat");
+  LDP_PLOT(symabstract, sh);
+
+  const TValId left = nextRootObj(sh, peer, off1.next);
+  const TValId right = nextRootObj(sh, peer, off2.next);
+  std::cout << "  >>> segTreeAbstractionStep(cursor=" << *pCursor << ", left=" << left << ", right =" << right << ')' << std::endl;
+
+  TMinLen len = objMinLength(sh, parent);
+  len += objMinLength(sh, left);
+  std::cout << "  segTreeAbstractionStep: len=" << len << std::endl;
+  sh.valTargetSetAbstract(parent, OK_TREE_BIN, off1);
+  CL_BREAK_IF(OK_TREE_BIN != sh.valTargetKind(parent));
+  std::cout << "  segTreeAbstractionStep: setting parent as abstract" << std::endl;
+
+  LDP_INIT(symabstract, "somewhat1");
+  LDP_PLOT(symabstract, sh);
+
+//  abstractNonMatchingValues(sh, left, parent);
+  std::cout << "  segTreeAbstractionStep: abstracting values" << std::endl;
+
+  std::cout << "  segTreeAbstractionStep: left selectors: left=" << sh.valByOffset(left, off1.next) << ", right=" << sh.valByOffset(left, off2.next) << std::endl;
+
+//        SymHeap                     &sh,
+//        const TValId                at,
+//        const TValId                nextAt,
+//        const BindingOff            &off)
+//{
+//    // read minimal length of 'obj' and set it temporarily to zero
+//    TMinLen len = objMinLength(sh, at);
+//    if (isAbstract(sh.valTarget(at)))
+//        sh.segSetMinLength(at, /* SLS 0+ */ 0);
+//
+//    len += objMinLength(sh, nextAt);
+//    if (OK_SLS == sh.valTargetKind(nextAt))
+//        sh.segSetMinLength(nextAt, /* SLS 0+ */ 0);
+//    else
+//        // abstract the _next_ object
+//        sh.valTargetSetAbstract(nextAt, OK_SLS, off);
+//
+//    // merge data
+//    CL_BREAK_IF(OK_SLS != sh.valTargetKind(nextAt));
+//    abstractNonMatchingValues(sh, at, nextAt);
+//
+//    // replace all references to 'head'
+//    const TOffset offHead = sh.segBinding(nextAt).head;
+//    const TValId headAt = sh.valByOffset(at, offHead);
+//    sh.valReplace(headAt, segHeadAt(sh, nextAt));
+
+//    // destroy self, including all prototypes
+//    REQUIRE_GC_ACTIVITY(sh, headAt, slSegAbstractionStep);
+//
+//    if (len)
+//        // declare resulting segment's minimal length
+//        sh.segSetMinLength(nextAt, len);
+  std::cout << "  <<< segTreeAbstractionStep (false)" << std::endl;
+  return false;
+}
+
 bool segAbstractionStep(
         SymHeap                     &sh,
         const BindingOff            &off,
@@ -622,9 +690,16 @@ bool considerAbstraction(
 {
     std::cout << ">>> considerAbstraction (entry=" << entry << ", off1=" << off1.next << ", off2=" << off2.next << ')' << std::endl;
     EObjKind kind;
+// FIXME: [TREES] I do not give a crap about thresholds now.
+#if !SE_DISABLE_SLS || !SE_DISABLE_DLS
     unsigned thr;
+#endif
     const char *name;
-
+// FIXME: [TREES] This is just a temporary workaround. This will
+//                need to be solved more systematically.
+//                Idea: somehow share code: if binding is DLS, then
+//                tree with back links are possible.
+#if !SE_DISABLE_SLS || !SE_DISABLE_DLS
     if (isDlsBinding(off)) {
         kind = OK_DLS;
         thr  = dlsThreshold;
@@ -635,7 +710,17 @@ bool considerAbstraction(
         thr  = slsThreshold;
         name = "SLS";
     }
+#endif
 
+#if !SE_DISABLE_TREES
+    kind = OK_TREE_BIN;
+    name = "BINTREE";
+#endif
+
+// I do not want to mess with this right now.
+// We abstract micro-trees only, anyways.
+// FIXME: [TREES] Get rid of this.
+#if !SE_DISABLE_SLS || !SE_DISABLE_DLS
     adjustAbstractionThreshold(&thr, sh, off, entry, lenTotal);
 
     // check whether the threshold is satisfied or not
@@ -645,6 +730,7 @@ bool considerAbstraction(
                 << thr << ")");
         return false;
     }
+#endif
 
     CL_DEBUG("    --- length of the longest segment is " << lenTotal);
 
@@ -660,6 +746,7 @@ bool considerAbstraction(
 
     for (unsigned i = 0; i < lenTotal; ++i) {
       // FIXME: [TREES] Temporary solution, will need to be removed.
+      if (off1 == off2){
         if (!segAbstractionStep(sh, off1, &cursor)) {
             CL_DEBUG("<-- validity of next " << (lenTotal - i - 1)
                     << " abstraction step(s) broken, forcing re-discovery...");
@@ -670,6 +757,19 @@ bool considerAbstraction(
             CL_BREAK_IF("segAbstractionStep() failed, nothing has been done");
             return false;
         }
+      }
+      else{
+        if (!segTreeAbstractionStep(sh, off1, off2, &cursor)) {
+            CL_DEBUG("<-- validity of next " << (lenTotal - i - 1)
+                    << " abstraction step(s) broken, forcing re-discovery...");
+
+            if (i)
+                return true;
+
+            CL_BREAK_IF("segTreeAbstractionStep() failed, nothing has been done");
+            return false;
+        }
+      }
 
         Trace::Node *trAbs = new Trace::AbstractionNode(sh.traceNode(), kind);
         sh.traceUpdate(trAbs);
