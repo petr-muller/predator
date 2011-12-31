@@ -254,12 +254,15 @@ bool /* complete */ traverseCore(
             // do not go above the starting point
             continue;
 
-        if (!visitor(obj))
+        if (!visitor(obj)){
             // traversal cancelled by visitor
+            std::cout << "    <<< traverseCore = false" << std::endl;
             return false;
+        }
     }
 
     // done
+    std::cout << "    <<< traverseCore = true" << std::endl;
     return true;
 }
 
