@@ -3668,6 +3668,9 @@ TMinLen SymHeap::segMinLength(TValId seg) const {
         case OK_SLS:
         case OK_DLS:
             return aData->minLength;
+        // FIXME: [TREES] Just a guess. Fix it.
+        case OK_TREE_BIN:
+            return aData->minLength;
 
         default:
             CL_BREAK_IF("invalid call of SymHeap::segMinLength()");
