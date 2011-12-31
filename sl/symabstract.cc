@@ -783,12 +783,14 @@ void abstractIfNeeded(SymHeap &sh) {
 #if SE_DISABLE_SLS && SE_DISABLE_DLS && SE_DISABLE_TREES
     return;
 #endif
-    BindingOff          off;
+    BindingOff          off1;
+    //FIXME: [TREES] Generalize to set of bindings
+    BindingOff          off2;
     TValId              entry;
     unsigned            len;
 
-    while ((len = discoverBestAbstraction(sh, &off, &entry))) {
-        if (!considerAbstraction(sh, off, entry, len))
+    while ((len = discoverBestAbstraction(sh, &off1, &off2, &entry))) {
+        if (!considerAbstraction(sh, off1, entry, len))
             // the best abstraction given is unfortunately not good enough
             break;
 

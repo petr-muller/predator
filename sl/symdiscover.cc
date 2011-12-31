@@ -575,7 +575,9 @@ typedef std::vector<SegCandidate> TSegCandidateList;
 unsigned /* len */ selectBestAbstraction(
         SymHeap                     &sh,
         const TSegCandidateList     &candidates,
-        BindingOff                  *pOff,
+        BindingOff                  *pOff1,
+        //FIXME: [TREES] Generalize to set of bindings
+        BindingOff                  *pOff2,
         TValId                      *entry)
 {
     const unsigned cnt = candidates.size();
@@ -594,6 +596,8 @@ unsigned /* len */ selectBestAbstraction(
     int                 bestCost    = INT_MAX;
     unsigned            bestIdx     = 0;
     BindingOff          bestBinding;
+    //FIXME: [TREES] Generalize to set of bindings
+    BindingOff          pairBinding;
 
     for (unsigned idx = 0; idx < cnt; ++idx) {
 
@@ -634,6 +638,7 @@ unsigned /* len */ selectBestAbstraction(
             bestIdx = idx;
             bestLen = len;
             bestBinding = off;
+            pairBinding = off;
         }
     }
 
@@ -643,14 +648,18 @@ unsigned /* len */ selectBestAbstraction(
     }
 
     // pick up the best candidate
-    *pOff = bestBinding;
+    *pOff1 = bestBinding;
+    *pOff2 = pairBinding;
     *entry = candidates[bestIdx].entry;
+    std::cout << "  <<< selectBestAbstraction" << std::endl;
     return bestLen;
 }
 
 unsigned /* len */ discoverBestAbstraction(
         SymHeap             &sh,
-        BindingOff          *off,
+        BindingOff          *off1,
+        //FIXME: [TREES] Generalize to set of bindings
+        BindingOff          *off2,
         TValId              *entry)
 {
     TSegCandidateList candidates;
@@ -675,5 +684,5 @@ unsigned /* len */ discoverBestAbstraction(
         candidates.push_back(segc);
     }
     std::cout << "<<< discoverBestAbstraction""" << std::endl;
-    return selectBestAbstraction(sh, candidates, off, entry);
+    return selectBestAbstraction(sh, candidates, off1, off2, entry);
 }
