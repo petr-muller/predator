@@ -557,7 +557,7 @@ bool segAbstractionStep(
     // jump to the next object (as we know such an object exists)
     const TValId next = nextRootObj(sh, peer, off.next);
 
-    // check wheter he upcoming abstraction step is still doable
+    // check whether the upcoming abstraction step is still doable
     EJoinStatus status;
     if (!joinDataReadOnly(&status, sh, off, at, next, 0))
         return false;
