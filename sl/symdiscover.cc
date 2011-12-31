@@ -579,9 +579,12 @@ unsigned /* len */ selectBestAbstraction(
         TValId                      *entry)
 {
     const unsigned cnt = candidates.size();
-    if (!cnt)
+    std::cout << "  >>> selectBestAbstraction (candidates count=" << cnt << ')' << std::endl;
+    if (!cnt){
         // no candidates given
+        std::cout << "  <<< selectBestAbstraction (no candidates)" << std::endl;
         return 0;
+    }
 
     CL_DEBUG("--> initiating segment discovery, "
             << cnt << " entry candidate(s) given");
@@ -596,10 +599,14 @@ unsigned /* len */ selectBestAbstraction(
 
         // go through binding candidates
         const SegCandidate &segc = candidates[idx];
+        std::cout << "  selectBestAbstraction (loop over candidate=" << segc.entry << ')' << std::endl;
         BOOST_FOREACH(const BindingOff &off, segc.offList) {
+            std::cout << "  selectBestAbstraction (loop over candidate=" << segc.entry << ") (loop over selector=" << off.next << ')' << std::endl;
             int len, cost;
             if (!segDiscover(&len, &cost, sh, off, segc.entry))
                 continue;
+
+            std::cout << "  selectBestAbstraction (loop over candidate=" << segc.entry << ") (loop over selector=" << off.next << "): survived after discovery" << std::endl;
 
 #if SE_DEFER_SLS_INTRO
             if (!cost 
@@ -663,7 +670,7 @@ unsigned /* len */ discoverBestAbstraction(
             continue;
 
         // append a segment candidate
-        std::cout << "discoverBestAbstraction: candidate=" << at << std::endl;
+        std::cout << "discoverBestAbstraction: candidate=" << at << ", count=" << segc.offList.size() << std::endl;
         segc.entry = at;
         candidates.push_back(segc);
     }
