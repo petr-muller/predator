@@ -614,7 +614,9 @@ void adjustAbstractionThreshold(
 
 bool considerAbstraction(
         SymHeap                     &sh,
-        const BindingOff            &off,
+// FIXME: [TREES] This will need to be done systematically.
+        const BindingOff            &off1,
+        const BindingOff            &off2,
         const TValId                entry,
         const unsigned              lenTotal)
 {
@@ -657,7 +659,8 @@ bool considerAbstraction(
     LDP_PLOT(symabstract, sh);
 
     for (unsigned i = 0; i < lenTotal; ++i) {
-        if (!segAbstractionStep(sh, off, &cursor)) {
+      // FIXME: [TREES] Temporary solution, will need to be removed.
+        if (!segAbstractionStep(sh, off1, &cursor)) {
             CL_DEBUG("<-- validity of next " << (lenTotal - i - 1)
                     << " abstraction step(s) broken, forcing re-discovery...");
 
@@ -794,7 +797,7 @@ void abstractIfNeeded(SymHeap &sh) {
     unsigned            len;
 
     while ((len = discoverBestAbstraction(sh, &off1, &off2, &entry))) {
-        if (!considerAbstraction(sh, off1, entry, len))
+        if (!considerAbstraction(sh, off1, off2, entry, len))
             // the best abstraction given is unfortunately not good enough
             break;
 
