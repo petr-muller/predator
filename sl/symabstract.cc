@@ -614,6 +614,7 @@ bool considerAbstraction(
         const TValId                entry,
         const unsigned              lenTotal)
 {
+    std::cout << ">>> considerAbstraction" << std::endl;
     EObjKind kind;
     unsigned thr;
     const char *name;
