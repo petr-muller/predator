@@ -538,7 +538,7 @@ class ProbeEntryVisitor {
             digBackLink(&off, sh, root_, next);
 #endif
 
-#if SE_DISABLE_SLS
+#if SE_DISABLE_SLS && SE_DISABLE_TREES
             // allow only DLS abstraction
             if (!isDlsBinding(off)){
                 std::cout << "      <<< Visitor" << std::endl;
