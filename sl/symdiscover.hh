@@ -49,7 +49,9 @@ inline bool isDlsBinding(const BindingOff &off) {
  */
 unsigned /* len */ discoverBestAbstraction(
         SymHeap                 &sh,
-        BindingOff              *bf,
+        BindingOff              *bf1,
+        //FIXME: [TREES] Generalize to set of bindings
+        BindingOff              *bf2,
         TValId                  *entry);
 
 #endif /* H_GUARD_SYMDISCOVER_H */
