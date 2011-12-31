@@ -349,6 +349,33 @@ bool segAvoidSelfCycle(
         || dlSegHaveChain(sh, seg, beg, off.next);
 }
 
+bool segTreeDiscover(
+        int                         *pLen,
+        int                         *pCost,
+        SymHeap                     &sh,
+        const BindingOff            &off1,
+        const BindingOff            &off2,
+        const TValId                entry)
+{
+  std::cout << "    >>> segTreeDiscover(off1=" << off1.next << ", off2=" << off2.next << ", entry=" << entry << ")" << std::endl;
+  std::set<TValId> haveSeen;
+  haveSeen.insert(entry);
+
+  TValId left = jumpToNextObj(sh, off1, haveSeen, entry);
+  TValId right = jumpToNextObj(sh, off2, haveSeen, entry);
+
+  if ((!insertOnce(haveSeen, left)) || (!insertOnce(haveSeen, right))){
+    return false;
+  }
+
+  if (left == VAL_INVALID && right == VAL_INVALID){
+    return false;
+  }
+  *pLen = 3;
+  *pCost = 1;
+  return true;
+}
+
 bool segDiscover(
         int                         *pLen,
         int                         *pCost,
@@ -644,6 +671,33 @@ unsigned /* len */ selectBestAbstraction(
             bestLen = len;
             bestBinding = off;
             pairBinding = off;
+        }
+#endif
+
+#if !SE_DISABLE_TREES
+        // it has to have at least two selectors to be a tree
+        if (segc.offList.size() > 1){
+          BOOST_FOREACH(const BindingOff &off1, segc.offList) {
+            BOOST_FOREACH(const BindingOff &off2, segc.offList) {
+              if (off1 != off2){
+                int len, cost;
+                if (!segTreeDiscover(&len, &cost, sh, off1, off2, segc.entry))
+                  continue;
+                if (bestCost < cost)
+                  continue;
+                bestCost = cost;
+                if (len <= bestLen)
+                  continue;
+                if (len <= (cost >> 2))
+                  continue;
+                bestIdx = idx;
+                bestLen = len;
+                //FIXME: [TREES] Generalize to set of bindings
+                bestBinding = off1;
+                pairBinding = off2;
+              }
+            }
+          }
         }
 #endif
     }
