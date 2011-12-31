@@ -607,6 +607,7 @@ unsigned /* len */ selectBestAbstraction(
 
         // go through binding candidates
         const SegCandidate &segc = candidates[idx];
+#if !SE_DISABLE_DLS || !SE_DISABLE_SLS
         std::cout << "  selectBestAbstraction (loop over candidate=" << segc.entry << ')' << std::endl;
         BOOST_FOREACH(const BindingOff &off, segc.offList) {
             std::cout << "  selectBestAbstraction (loop over candidate=" << segc.entry << ") (loop over selector=" << off.next << ')' << std::endl;
@@ -644,6 +645,7 @@ unsigned /* len */ selectBestAbstraction(
             bestBinding = off;
             pairBinding = off;
         }
+#endif
     }
 
     if (!bestLen) {
