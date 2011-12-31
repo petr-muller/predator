@@ -64,6 +64,10 @@ static const unsigned slsThreshold = 1;
 /// abstraction trigger threshold for DLS
 static const unsigned dlsThreshold = 1;
 
+// FIXME: [TREES] This is currently most likely bogus
+/// abstraction trigger threshold for binary trees
+static const unsigned binTreeThreshold = 1;
+
 // visitor
 struct UnknownValuesDuplicator {
     TObjSet ignoreList;

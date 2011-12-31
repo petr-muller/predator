@@ -368,7 +368,7 @@ bool segTreeDiscover(
   if (left == VAL_INVALID && right == VAL_INVALID){
     return false;
   }
-  *pLen = 3;
+  *pLen = 1;
   *pCost = 1;
   return true;
 }
