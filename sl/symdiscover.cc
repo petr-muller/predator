@@ -513,8 +513,7 @@ class ProbeEntryVisitor {
             const TValId next = sub.value();
             std::cout << "      Visitor::next = " << next << std::endl;
             if (!canWriteDataPtrAt(sh, next)){
-                std::cout << "      canWriteDataPtrAt FAIL" << std::endl;
-                std::cout << "      <<< Visitor" << std::endl;
+                std::cout << "      <<< Visitor (cannot write to location)" << std::endl;
                 return /* continue */ true;
             }
 
@@ -537,13 +536,13 @@ class ProbeEntryVisitor {
 #if SE_DISABLE_SLS && SE_DISABLE_TREES
             // allow only DLS abstraction
             if (!isDlsBinding(off)){
-                std::cout << "      <<< Visitor" << std::endl;
+                std::cout << "      <<< Visitor (is not DLS and SLS disabled)" << std::endl;
                 return /* continue */ true;
             }
 #endif
             // append a candidate
             dst_.push_back(off);
-            std::cout << "      <<< Visitor" << std::endl;
+            std::cout << "      <<< Visitor (candidate found)" << std::endl;
             return /* continue */ true;
         }
 };
@@ -656,6 +655,7 @@ unsigned /* len */ discoverBestAbstraction(
     BOOST_FOREACH(const TValId at, addrs) {
         // use ProbeEntryVisitor visitor to validate the potential segment entry
         SegCandidate segc;
+        std::cout << "discoverBestAbstraction: candidate=" << at << std::endl;
         const ProbeEntryVisitor visitor(segc.offList, at);
         traverseLivePtrs(sh, at, visitor);
         if (segc.offList.empty())
@@ -663,6 +663,7 @@ unsigned /* len */ discoverBestAbstraction(
             continue;
 
         // append a segment candidate
+        std::cout << "discoverBestAbstraction: candidate=" << at << std::endl;
         segc.entry = at;
         candidates.push_back(segc);
     }
