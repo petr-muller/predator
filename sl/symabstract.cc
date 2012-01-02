@@ -545,8 +545,7 @@ bool /* jump next */ dlSegAbstractionStep(
 // FIXME: [TREES] Temporary tree-specific abstraction
 bool segTreeAbstractionStep(
         SymHeap                     &sh,
-        const BindingOff            &off1,
-        const BindingOff            &off2,
+        const BindingOff            &off,
         TValId                      *pCursor)
 {
   const TValId parent = *pCursor;
@@ -555,14 +554,14 @@ bool segTreeAbstractionStep(
   LDP_INIT(symabstract, "somewhat");
   LDP_PLOT(symabstract, sh);
 
-  const TValId left = nextRootObj(sh, peer, off1.next);
-  const TValId right = nextRootObj(sh, peer, off2.next);
+  const TValId left = nextRootObj(sh, peer, off.next);
+  const TValId right = nextRootObj(sh, peer, off.right);
   std::cout << "  >>> segTreeAbstractionStep(cursor=" << *pCursor << ", left=" << left << ", right =" << right << ')' << std::endl;
 
   TMinLen len = objMinLength(sh, parent);
   len += objMinLength(sh, left);
   std::cout << "  segTreeAbstractionStep: len=" << len << std::endl;
-  sh.valTargetSetAbstract(parent, OK_TREE_BIN, off1);
+  sh.valTargetSetAbstract(parent, OK_TREE_BIN, off);
   CL_BREAK_IF(OK_TREE_BIN != sh.valTargetKind(parent));
   std::cout << "  segTreeAbstractionStep: setting parent as abstract" << std::endl;
 
@@ -682,13 +681,11 @@ void adjustAbstractionThreshold(
 
 bool considerAbstraction(
         SymHeap                     &sh,
-// FIXME: [TREES] This will need to be done systematically.
-        const BindingOff            &off1,
-        const BindingOff            &off2,
+        const BindingOff            &off,
         const TValId                entry,
         const unsigned              lenTotal)
 {
-    std::cout << ">>> considerAbstraction (entry=" << entry << ", off1=" << off1.next << ", off2=" << off2.next << ')' << std::endl;
+    std::cout << ">>> considerAbstraction (entry=" << entry << ", off=(" << off.head << ',' << off.next << ',' << off.prev << ',' << off.right << "))" << std::endl;
     EObjKind kind;
 // FIXME: [TREES] I do not give a crap about thresholds now.
 #if !SE_DISABLE_SLS || !SE_DISABLE_DLS
@@ -746,8 +743,8 @@ bool considerAbstraction(
 
     for (unsigned i = 0; i < lenTotal; ++i) {
       // FIXME: [TREES] Temporary solution, will need to be removed.
-      if (off1 == off2){
-        if (!segAbstractionStep(sh, off1, &cursor)) {
+      if (off.next == off.right){ // FIXME [TREES] isTreeBinding() ?
+        if (!segAbstractionStep(sh, off, &cursor)) {
             CL_DEBUG("<-- validity of next " << (lenTotal - i - 1)
                     << " abstraction step(s) broken, forcing re-discovery...");
 
@@ -759,7 +756,7 @@ bool considerAbstraction(
         }
       }
       else{
-        if (!segTreeAbstractionStep(sh, off1, off2, &cursor)) {
+        if (!segTreeAbstractionStep(sh, off, &cursor)) {
             CL_DEBUG("<-- validity of next " << (lenTotal - i - 1)
                     << " abstraction step(s) broken, forcing re-discovery...");
 
@@ -890,14 +887,12 @@ void abstractIfNeeded(SymHeap &sh) {
 #if SE_DISABLE_SLS && SE_DISABLE_DLS && SE_DISABLE_TREES
     return;
 #endif
-    BindingOff          off1;
-    //FIXME: [TREES] Generalize to set of bindings
-    BindingOff          off2;
+    BindingOff          off;
     TValId              entry;
     unsigned            len;
 
-    while ((len = discoverBestAbstraction(sh, &off1, &off2, &entry))) {
-        if (!considerAbstraction(sh, off1, off2, entry, len))
+    while ((len = discoverBestAbstraction(sh, &off, &entry))) {
+        if (!considerAbstraction(sh, off, entry, len))
             // the best abstraction given is unfortunately not good enough
             break;
 
