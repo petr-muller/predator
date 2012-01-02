@@ -702,6 +702,66 @@ unsigned /* len */ selectBestAbstraction(
     return bestLen;
 }
 
+inline bool isBinTreeBinding(const BindingOff &off) {
+    return (off.next != off.right);
+}
+
+inline bool treeCompatibleOffsets(const BindingOff &off1,
+                                  const BindingOff &off2){
+  return off1 != off2                // different bindings
+         && off1.head == off2.head   // same head
+         && off1.next == off1.right  // not a tree already
+         && off2.next == off2.right; // not a tree already
+         // FIXME: [TREES] Deal with backlinks
+}
+
+BindingOff treeMergeBindingOffsets(const BindingOff &off1,
+                                   const BindingOff &off2){
+  std::cout << "    >>> treeMergeBindingOffsets((" << off1.head << ',' << off1.next << ',' << off1.prev << ',' << off1.right << "),("<< off2.head << ',' << off2.next << ',' << off2.prev << ',' << off2.right << "))" << std::endl;
+  BindingOff retval;
+
+  retval.head = off1.head;
+  retval.next = off1.next;
+  // FIXME: [TREES] Deal with back links later.
+  retval.prev = off1.prev; // To satisfy DLS -> prev!=next
+  retval.right = off2.next;
+
+  std::cout << "    <<< treeMergeBindingOffsets =(" << retval.head << ',' << retval.next << ',' << retval.prev << ',' << retval.right << ')' << std::endl;
+
+  return retval;
+}
+
+void sortOutCandidateBindings(TBindingCandidateList &oldCl){
+  std::cout << "  >>> sortOutCandidateBindings" << std::endl;
+  TBindingCandidateList newCl;
+  for (TBindingCandidateList::const_iterator i = oldCl.begin(); i != oldCl.end(); ++i){
+    std::cout << "  sortOutCandidateBindings: checking candidate (" << i->head << ',' << i->next << ',' << i->prev << ',' << i->right << ')' << std::endl;
+  #if !SE_DISABLE_TREES
+    for (TBindingCandidateList::const_iterator j = i; j != oldCl.end(); ++j){
+    std::cout << "  sortOutCandidateBindings: checking candidate (" << i->head << ',' << i->next << ',' << i->prev << ',' << i->right << ") paired with (" << j->head << ',' << j->next << ',' << j->prev << ',' << j->right << "): ";
+      if (treeCompatibleOffsets(*i,*j)){
+        std::cout << "compatible" << std::endl;
+        newCl.push_back(treeMergeBindingOffsets(*i,*j));
+      }
+      else{
+        std::cout << "uncompatible" << std::endl;
+      }
+    }
+  #endif
+  #if !SE_DISABLE_DLS || !SE_DISABLE_SLS
+    std::cout << "  sortOutCandidateBindings: SLS/DLS on, putting the original candidate back too" << std::endl;
+    // FIXME: [TREES] This is inefficient as hell: find candidates so we immediately omit it again...
+    newCl.push_back(*i);
+  #endif
+  }
+  oldCl.swap(newCl);
+  std::cout << "  <<< sortOutCandidateBindings= {";
+  for (TBindingCandidateList::const_iterator i = oldCl.begin(); i != oldCl.end(); ++i){
+    std::cout << "(" << i->head << ',' << i->next << ',' << i->prev << ',' << i->right << "), ";
+  }
+  std::cout << '}' << std::endl;
+}
+
 unsigned /* len */ discoverBestAbstraction(
         SymHeap             &sh,
         BindingOff          *off,
@@ -728,6 +788,14 @@ unsigned /* len */ discoverBestAbstraction(
         segc.entry = at;
         candidates.push_back(segc);
     }
+
+#if !SE_DISABLE_TREES
+    for (unsigned idx = 0; idx < candidates.size(); ++idx) {
+      SegCandidate &segc = candidates[idx];
+      std::cout << "discoverBestAbstraction: checking candidate " << segc.entry << " for tree binding candidates" << std::endl;
+      sortOutCandidateBindings(segc.offList);
+    }
+#endif
 
     unsigned retval = selectBestAbstraction(sh, candidates, off, entry);
     std::cout << "<<< discoverBestAbstraction""" << std::endl << std::endl;
