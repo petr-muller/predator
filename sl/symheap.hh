@@ -664,21 +664,24 @@ enum EObjKind {
 /// tuple of binding offsets assigned to abstract objects
 struct BindingOff {
     TOffset head;           ///< target offset
-    TOffset next;           ///< offset of the 'next' or 'r' pointer
-    TOffset prev;           ///< offset of the 'prev' or 'l' pointer
-    //FIXME: [TREES] Will this need extending to allow parent pointers?
+    TOffset next;           ///< offset of the 'next' or 'left' pointer
+    TOffset prev;           ///< offset of the 'prev' or 'parent' pointer
+    TOffset right;          ///< offset of the 'right' pointer
+    //FIXME: [TREES] This will probably need to be generalized for more bindings?
 
     BindingOff():
         head(0),
         next(0),
-        prev(0)
+        prev(0),
+        right(0)
     {
     }
 
     BindingOff(EObjKind kind):
         head(-1),
         next(-1),
-        prev(-1)
+        prev(-1),
+        right(-1)
     {
         CL_BREAK_IF(OK_OBJ_OR_NULL != kind);
         (void) kind;
@@ -690,7 +693,8 @@ inline bool operator==(const BindingOff &off1, const BindingOff &off2)
 {
     return off1.head == off2.head
         && off1.next == off2.next
-        && off1.prev == off2.prev;
+        && off1.prev == off2.prev
+        && off1.right == off2.right;
 }
 
 /// point-wise comparison of BindingOff

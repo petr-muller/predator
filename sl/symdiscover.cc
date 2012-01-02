@@ -552,6 +552,7 @@ class ProbeEntryVisitor {
             off.next = sh.valOffset(sub.placedAt());
             off.prev = off.next;
             std::cout << "      Visitor::off(head=" << off.head << ", next=" << off.next << ", prev=" << off.prev << ')' << std::endl;
+            off.right = off.next;
             // [TREES] Somewhere around can be the first place to spot
             // candidates for Tree abstraction. But most likely not.
             // This just puts a candidate links (with possible backlinks)
@@ -569,7 +570,7 @@ class ProbeEntryVisitor {
 #endif
             // append a candidate
             dst_.push_back(off);
-            std::cout << "      <<< Visitor (candidate found)" << std::endl;
+            std::cout << "    <<< Visitor (candidate=(" << off.head << ',' << off.next << ',' << off.prev << ',' << off.right << "))" << std::endl;
             return /* continue */ true;
         }
 };
@@ -602,9 +603,7 @@ typedef std::vector<SegCandidate> TSegCandidateList;
 unsigned /* len */ selectBestAbstraction(
         SymHeap                     &sh,
         const TSegCandidateList     &candidates,
-        BindingOff                  *pOff1,
-        //FIXME: [TREES] Generalize to set of bindings
-        BindingOff                  *pOff2,
+        BindingOff                  *pOff,
         TValId                      *entry)
 {
     const unsigned cnt = candidates.size();
@@ -623,8 +622,6 @@ unsigned /* len */ selectBestAbstraction(
     int                 bestCost    = INT_MAX;
     unsigned            bestIdx     = 0;
     BindingOff          bestBinding;
-    //FIXME: [TREES] Generalize to set of bindings
-    BindingOff          pairBinding;
 
     for (unsigned idx = 0; idx < cnt; ++idx) {
 
@@ -666,7 +663,6 @@ unsigned /* len */ selectBestAbstraction(
             bestIdx = idx;
             bestLen = len;
             bestBinding = off;
-            pairBinding = off;
         }
 #endif
 
@@ -690,7 +686,6 @@ unsigned /* len */ selectBestAbstraction(
                 bestLen = len;
                 //FIXME: [TREES] Generalize to set of bindings
                 bestBinding = off1;
-                pairBinding = off2;
               }
             }
           }
@@ -704,8 +699,7 @@ unsigned /* len */ selectBestAbstraction(
     }
 
     // pick up the best candidate
-    *pOff1 = bestBinding;
-    *pOff2 = pairBinding;
+    *pOff = bestBinding;
     *entry = candidates[bestIdx].entry;
     std::cout << "  <<< selectBestAbstraction" << std::endl;
     return bestLen;
@@ -713,9 +707,7 @@ unsigned /* len */ selectBestAbstraction(
 
 unsigned /* len */ discoverBestAbstraction(
         SymHeap             &sh,
-        BindingOff          *off1,
-        //FIXME: [TREES] Generalize to set of bindings
-        BindingOff          *off2,
+        BindingOff          *off,
         TValId              *entry)
 {
     TSegCandidateList candidates;
@@ -739,6 +731,8 @@ unsigned /* len */ discoverBestAbstraction(
         segc.entry = at;
         candidates.push_back(segc);
     }
-    std::cout << "<<< discoverBestAbstraction""" << std::endl;
-    return selectBestAbstraction(sh, candidates, off1, off2, entry);
+
+    unsigned retval = selectBestAbstraction(sh, candidates, off, entry);
+    std::cout << "<<< discoverBestAbstraction""" << std::endl << std::endl;
+    return retval;
 }
