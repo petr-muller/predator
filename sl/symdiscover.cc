@@ -639,7 +639,7 @@ unsigned /* len */ selectBestAbstraction(
             std::cout << "  selectBestAbstraction (loop over candidate=" << segc.entry << ") (loop over selector=" << off.next << "): survived after discovery" << std::endl;
 
 #if SE_DEFER_SLS_INTRO
-            if (!cost 
+            if (!cost
                     && !isDlsBinding(off)
                     && !slSegOnPath(sh, off, segc.entry, len))
             {
