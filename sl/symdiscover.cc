@@ -533,12 +533,12 @@ class ProbeEntryVisitor {
 
         bool operator()(const ObjHandle &sub) const
         {
-            std::cout << "      >>> Visitor(sub=" << sub.objId() << ')' << std::endl;
+            std::cout << "    >>> Visitor(object=" << sub.objId() << ')' << std::endl;
             SymHeap &sh = *static_cast<SymHeap *>(sub.sh());
             const TValId next = sub.value();
-            std::cout << "      Visitor::next = " << next << std::endl;
+            std::cout << "    Visitor::next = " << next << std::endl;
             if (!canWriteDataPtrAt(sh, next)){
-                std::cout << "      <<< Visitor (cannot write to location)" << std::endl;
+                std::cout << "    <<< Visitor (cannot write to location)" << std::endl;
                 return /* continue */ true;
             }
 
@@ -561,7 +561,7 @@ class ProbeEntryVisitor {
 #if SE_DISABLE_SLS && SE_DISABLE_TREES
             // allow only DLS abstraction
             if (!isDlsBinding(off)){
-                std::cout << "      <<< Visitor (is not DLS and SLS disabled)" << std::endl;
+                std::cout << "    <<< Visitor (found only DLS, SLS and Trees are disabled)" << std::endl;
                 return /* continue */ true;
             }
 #endif
