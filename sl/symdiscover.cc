@@ -529,8 +529,6 @@ class ProbeEntryVisitor {
             dst_(dst),
             root_(root)
         {
-            std::cout << "  >>> Visitor constructor (root=" << root << ")" << std::endl;
-            std::cout << "  <<< Visitor constructor (root=" << root << ")" << std::endl;
         }
 
         bool operator()(const ObjHandle &sub) const
@@ -551,7 +549,6 @@ class ProbeEntryVisitor {
             // entry candidate found, check the back-link in case of DLL
             off.next = sh.valOffset(sub.placedAt());
             off.prev = off.next;
-            std::cout << "      Visitor::off(head=" << off.head << ", next=" << off.next << ", prev=" << off.prev << ')' << std::endl;
             off.right = off.next;
             // [TREES] Somewhere around can be the first place to spot
             // candidates for Tree abstraction. But most likely not.

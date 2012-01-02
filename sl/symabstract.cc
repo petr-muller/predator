@@ -550,9 +550,6 @@ bool segTreeAbstractionStep(
 {
   const TValId parent = *pCursor;
   TValId peer = parent;
-  LDP_ENABLE(symabstract);
-  LDP_INIT(symabstract, "somewhat");
-  LDP_PLOT(symabstract, sh);
 
   const TValId left = nextRootObj(sh, peer, off.next);
   const TValId right = nextRootObj(sh, peer, off.right);
@@ -565,13 +562,8 @@ bool segTreeAbstractionStep(
   CL_BREAK_IF(OK_TREE_BIN != sh.valTargetKind(parent));
   std::cout << "  segTreeAbstractionStep: setting parent as abstract" << std::endl;
 
-  LDP_INIT(symabstract, "somewhat1");
-  LDP_PLOT(symabstract, sh);
-
 //  abstractNonMatchingValues(sh, left, parent);
   std::cout << "  segTreeAbstractionStep: abstracting values" << std::endl;
-
-  std::cout << "  segTreeAbstractionStep: left selectors: left=" << sh.valByOffset(left, off1.next) << ", right=" << sh.valByOffset(left, off2.next) << std::endl;
 
 //        SymHeap                     &sh,
 //        const TValId                at,
