@@ -1,0 +1,55 @@
+global start
+global enabled
+global custom
+
+function generic_in(func:string){
+  printf("%s>>> %s\n", thread_indent(1), func)
+}
+
+function generic_out(func:string){
+  printf("%s<<< %s\n", thread_indent(-1), func)
+}
+
+probe begin{
+  start = 0
+  enabled[@2]=1;
+  enabled[@3]=1;
+  enabled[@4]=1;
+  enabled[@5]=1;
+  enabled[@6]=1;
+  enabled[@7]=1;
+  enabled[@8]=1;
+  enabled[@9]=1;
+  enabled[@10]=1;
+  enabled[@11]=1;
+
+  custom[@2]=1;
+}
+
+probe process(@1).function(@2){
+  start = 1;
+  generic_in(probefunc());
+}
+
+probe process(@1).function(@2).return{
+  start = 0;
+  generic_out(probefunc());
+}
+
+probe process(@1).function("*"){
+  if (start){
+    func = probefunc()
+    if (enabled[func] && ! custom[func]){
+      generic_in(func);
+    }
+  }
+}
+
+probe process(@1).function("*").return{
+  if (start){
+    func = probefunc()
+    if (enabled[func] && ! custom[func]){
+      generic_out(func)
+    }
+  }
+}
