@@ -1,0 +1,53 @@
+#!/bin/bash
+if test -z "$1" || test ! -e "$1" || test -z "$2"; then
+    echo Usage: $0 foo.c
+    exit 1
+fi
+
+self="`readlink -f "$0"`"
+topdir="`dirname "$self"`/.."
+
+# basic setup
+CL_DIR="$topdir/cl"
+SL_DIR="$topdir/sl"
+SL_BUILD="$topdir/sl_build"
+SL_PLUG="$SL_BUILD/libsl.so"
+CC1="$topdir/gcc-install/libexec/gcc/*/4.[5-7]*/cc1"
+CFILE="$1";
+START="$2";
+
+if [ -z "$3" ]; then F1="$START"; else F1="$3"; fi
+if [ -z "$4" ]; then F2="$START"; else F2="$4"; fi
+if [ -z "$5" ]; then F3="$START"; else F3="$5"; fi
+if [ -z "$6" ]; then F4="$START"; else F4="$6"; fi
+if [ -z "$7" ]; then F5="$START"; else F5="$7"; fi
+if [ -z "$8" ]; then F6="$START"; else F6="$8"; fi
+if [ -z "$9" ]; then F7="$START"; else F7="$9"; fi
+if [ -z "$(10)" ]; then F8="$START"; else F8="$(10)"; fi
+if [ -z "$(11)" ]; then F9="$START"; else F9="$(11)"; fi
+if [ -z "$(12)" ]; then F10="$START"; else F10="$(12)"; fi
+
+# attempt to make
+make -C "$CL_DIR" -s -j5 'CMAKE=cmake -D USE_INT3_AS_BRK=ON -D CL_DEBUG=ON' \
+    || exit 1
+make -C "$SL_DIR" -s -j5 'CMAKE=cmake -D USE_INT3_AS_BRK=ON -D SL_DEBUG=ON' \
+    || exit 1
+test -x "$SL_PLUG" \
+    || exit 1
+
+# use pp code listener by default
+test -z "$SL_OPTS" && SL_OPTS="-fplugin-arg-libsl-dump-pp"
+
+# prepare the command line
+CCRUN="$CC1 \"$CFILE\" \
+    -I$topdir/include/predator-builtins -DPREDATOR \
+    -dumpbase test.c -quiet -o /dev/null \
+    -m32 -O0 -Wall -Wextra \
+    -fplugin=$SL_PLUG \
+    -fplugin-arg-libsl-verbose=$SL_VERBOSE \
+    $SL_OPTS"
+RUN="stap -c \"$CCRUN\" $topdir/sl/sltrace.stp -v $SL_PLUG $START \
+     $F1 $F2 $F3 $F4 $F5 $F6 $F7 $F8 $F9 $F10"
+RUN="`printf "$RUN" | tr --squeeze-repeats ' '`"
+printf "\n\n%s\n\n" "$RUN"
+eval "$RUN"
