@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with predator.  If not, see <http://www.gnu.org/licenses/>.
 
-MIRROR          ?= http://ftp.fi.muni.cz/pub/linux/gentoo
+MIRROR          ?= http://gentoo.mirror.dkm.cz/pub/gentoo/
 
 BOOST_STABLE    ?= boost_1_46_1#            # released Boost
 BOOST_STABLE_TGZ?= $(BOOST_STABLE).tar.bz2# # tarball of released Boost
