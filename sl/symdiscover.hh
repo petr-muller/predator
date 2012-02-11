@@ -33,6 +33,10 @@ inline bool isDlsBinding(const BindingOff &off) {
     return (off.next != off.prev);
 }
 
+inline bool isTreeBinding(const BindingOff &off) {
+    return (off.next != off.right);
+}
+
 /**
  * Take the given symbolic heap and look for the best possible abstraction in
  * there.  If nothing is found, zero is returned.  Otherwise it returns total
