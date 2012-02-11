@@ -742,6 +742,7 @@ bool considerAbstraction(
         }
       }
       else{
+      //FIXME: [TREES] Probably not stepped, but fired at once
         if (!segTreeAbstractionStep(sh, off, &cursor)) {
             CL_DEBUG("<-- validity of next " << (lenTotal - i - 1)
                     << " abstraction step(s) broken, forcing re-discovery...");
