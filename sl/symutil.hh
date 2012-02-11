@@ -240,7 +240,6 @@ bool /* complete */ traverseCore(
         TMethod                     method)
 {
     // check that we got a valid root object
-    std::cout << "  >>> traverseCore(at=" << at << ')' << std::endl;
     CL_BREAK_IF(!isPossibleToDeref(sh.valTarget(at)));
     const TValId rootAt = sh.valRoot(at);
     const TOffset offRoot = sh.valOffset(at);
@@ -248,7 +247,6 @@ bool /* complete */ traverseCore(
     ObjList objs;
     (sh.*method)(objs, rootAt);
     BOOST_FOREACH(const ObjHandle &obj, objs) {
-        std::cout << "  traverseCore(loop over objects=" << obj.objId() << ')' << std::endl;
         const TOffset off = sh.valOffset(obj.placedAt());
         if (off < offRoot)
             // do not go above the starting point
@@ -256,13 +254,11 @@ bool /* complete */ traverseCore(
 
         if (!visitor(obj)){
             // traversal cancelled by visitor
-            std::cout << "  <<< traverseCore = false" << std::endl;
             return false;
         }
     }
 
     // done
-    std::cout << "  <<< traverseCore = true" << std::endl;
     return true;
 }
 
