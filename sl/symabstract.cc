@@ -729,7 +729,7 @@ bool considerAbstraction(
 
     for (unsigned i = 0; i < lenTotal; ++i) {
       // FIXME: [TREES] Temporary solution, will need to be removed.
-      if (off.next == off.right){ // FIXME [TREES] isTreeBinding() ?
+      if (!isTreeBinding(off)){
         if (!segAbstractionStep(sh, off, &cursor)) {
             CL_DEBUG("<-- validity of next " << (lenTotal - i - 1)
                     << " abstraction step(s) broken, forcing re-discovery...");
