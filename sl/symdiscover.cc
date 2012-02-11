@@ -357,7 +357,6 @@ bool segTreeDiscover(
         const BindingOff            &off2,
         const TValId                entry)
 {
-  std::cout << "    >>> segTreeDiscover(off1=" << off1.next << ", off2=" << off2.next << ", entry=" << entry << ")" << std::endl;
   std::set<TValId> haveSeen;
   haveSeen.insert(entry);
 
@@ -537,12 +536,9 @@ class ProbeEntryVisitor {
 
         bool operator()(const ObjHandle &sub) const
         {
-            std::cout << "    >>> Visitor(object=" << sub.objId() << ')' << std::endl;
             SymHeap &sh = *static_cast<SymHeap *>(sub.sh());
             const TValId next = sub.value();
-            std::cout << "    Visitor::next = " << next << std::endl;
             if (!canWriteDataPtrAt(sh, next)){
-                std::cout << "    <<< Visitor (cannot write to location)" << std::endl;
                 return /* continue */ true;
             }
 
@@ -565,13 +561,11 @@ class ProbeEntryVisitor {
 #if SE_DISABLE_SLS && SE_DISABLE_TREES
             // allow only DLS abstraction
             if (!isDlsBinding(off)){
-                std::cout << "    <<< Visitor (found only DLS, SLS and Trees are disabled)" << std::endl;
                 return /* continue */ true;
             }
 #endif
             // append a candidate
             dst_.push_back(off);
-            std::cout << "    <<< Visitor (candidate=(" << off.head << ',' << off.next << ',' << off.prev << ',' << off.right << "))" << std::endl;
             return /* continue */ true;
         }
 };
@@ -608,10 +602,8 @@ unsigned /* len */ selectBestAbstraction(
         TValId                      *entry)
 {
     const unsigned cnt = candidates.size();
-    std::cout << "  >>> selectBestAbstraction (candidates count=" << cnt << ')' << std::endl;
     if (!cnt){
         // no candidates given
-        std::cout << "  <<< selectBestAbstraction (no candidates)" << std::endl;
         return 0;
     }
 
@@ -629,14 +621,11 @@ unsigned /* len */ selectBestAbstraction(
         // go through binding candidates
         const SegCandidate &segc = candidates[idx];
 #if !SE_DISABLE_DLS || !SE_DISABLE_SLS
-        std::cout << "  selectBestAbstraction (loop over candidate=" << segc.entry << ')' << std::endl;
         BOOST_FOREACH(const BindingOff &off, segc.offList) {
-            std::cout << "  selectBestAbstraction (loop over candidate=" << segc.entry << ") (loop over selector=" << off.next << ')' << std::endl;
             int len, cost;
             if (!segDiscover(&len, &cost, sh, off, segc.entry))
                 continue;
 
-            std::cout << "  selectBestAbstraction (loop over candidate=" << segc.entry << ") (loop over selector=" << off.next << "): survived after discovery" << std::endl;
 
 #if SE_DEFER_SLS_INTRO
             if (!cost
@@ -702,7 +691,6 @@ unsigned /* len */ selectBestAbstraction(
     // pick up the best candidate
     *pOff = bestBinding;
     *entry = candidates[bestIdx].entry;
-    std::cout << "  <<< selectBestAbstraction" << std::endl;
     return bestLen;
 }
 
@@ -721,7 +709,6 @@ inline bool treeCompatibleOffsets(const BindingOff &off1,
 
 BindingOff treeMergeBindingOffsets(const BindingOff &off1,
                                    const BindingOff &off2){
-  std::cout << "    >>> treeMergeBindingOffsets((" << off1.head << ',' << off1.next << ',' << off1.prev << ',' << off1.right << "),("<< off2.head << ',' << off2.next << ',' << off2.prev << ',' << off2.right << "))" << std::endl;
   BindingOff retval;
 
   retval.head = off1.head;
@@ -730,40 +717,30 @@ BindingOff treeMergeBindingOffsets(const BindingOff &off1,
   retval.prev = off1.prev; // To satisfy DLS -> prev!=next
   retval.right = off2.next;
 
-  std::cout << "    <<< treeMergeBindingOffsets =(" << retval.head << ',' << retval.next << ',' << retval.prev << ',' << retval.right << ')' << std::endl;
 
   return retval;
 }
 
 void sortOutCandidateBindings(TBindingCandidateList &oldCl){
-  std::cout << "  >>> sortOutCandidateBindings" << std::endl;
   TBindingCandidateList newCl;
   for (TBindingCandidateList::const_iterator i = oldCl.begin(); i != oldCl.end(); ++i){
-    std::cout << "  sortOutCandidateBindings: checking candidate (" << i->head << ',' << i->next << ',' << i->prev << ',' << i->right << ')' << std::endl;
   #if !SE_DISABLE_TREES
     for (TBindingCandidateList::const_iterator j = i; j != oldCl.end(); ++j){
-    std::cout << "  sortOutCandidateBindings: checking candidate (" << i->head << ',' << i->next << ',' << i->prev << ',' << i->right << ") paired with (" << j->head << ',' << j->next << ',' << j->prev << ',' << j->right << "): ";
       if (treeCompatibleOffsets(*i,*j)){
-        std::cout << "compatible" << std::endl;
         newCl.push_back(treeMergeBindingOffsets(*i,*j));
       }
       else{
-        std::cout << "uncompatible" << std::endl;
       }
     }
   #endif
   #if !SE_DISABLE_DLS || !SE_DISABLE_SLS
-    std::cout << "  sortOutCandidateBindings: SLS/DLS on, putting the original candidate back too" << std::endl;
     // FIXME: [TREES] This is inefficient as hell: find candidates so we immediately omit it again...
     newCl.push_back(*i);
   #endif
   }
   oldCl.swap(newCl);
-  std::cout << "  <<< sortOutCandidateBindings= {";
   for (TBindingCandidateList::const_iterator i = oldCl.begin(); i != oldCl.end(); ++i){
-    std::cout << "(" << i->head << ',' << i->next << ',' << i->prev << ',' << i->right << "), ";
   }
-  std::cout << '}' << std::endl;
 }
 
 unsigned /* len */ discoverBestAbstraction(
@@ -776,11 +753,9 @@ unsigned /* len */ discoverBestAbstraction(
     // go through all potential segment entries
     TValList addrs;
     sh.gatherRootObjects(addrs, isOnHeap);
-    std::cout << ">>> discoverBestAbstraction""" << std::endl;
     BOOST_FOREACH(const TValId at, addrs) {
         // use ProbeEntryVisitor visitor to validate the potential segment entry
         SegCandidate segc;
-        std::cout << "discoverBestAbstraction: candidate=" << at << std::endl;
         const ProbeEntryVisitor visitor(segc.offList, at);
         traverseLivePtrs(sh, at, visitor);
         if (segc.offList.empty())
@@ -788,7 +763,6 @@ unsigned /* len */ discoverBestAbstraction(
             continue;
 
         // append a segment candidate
-        std::cout << "discoverBestAbstraction: candidate=" << at << ", count=" << segc.offList.size() << std::endl;
         segc.entry = at;
         candidates.push_back(segc);
     }
@@ -796,12 +770,10 @@ unsigned /* len */ discoverBestAbstraction(
 #if !SE_DISABLE_TREES
     for (unsigned idx = 0; idx < candidates.size(); ++idx) {
       SegCandidate &segc = candidates[idx];
-      std::cout << "discoverBestAbstraction: checking candidate " << segc.entry << " for tree binding candidates" << std::endl;
       sortOutCandidateBindings(segc.offList);
     }
 #endif
 
     unsigned retval = selectBestAbstraction(sh, candidates, off, entry);
-    std::cout << "<<< discoverBestAbstraction""" << std::endl << std::endl;
     return retval;
 }

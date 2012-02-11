@@ -553,17 +553,13 @@ bool segTreeAbstractionStep(
 
   const TValId left = nextRootObj(sh, peer, off.next);
   const TValId right = nextRootObj(sh, peer, off.right);
-  std::cout << "  >>> segTreeAbstractionStep(cursor=" << *pCursor << ", left=" << left << ", right =" << right << ')' << std::endl;
 
   TMinLen len = objMinLength(sh, parent);
   len += objMinLength(sh, left);
-  std::cout << "  segTreeAbstractionStep: len=" << len << std::endl;
   sh.valTargetSetAbstract(parent, OK_TREE_BIN, off);
   CL_BREAK_IF(OK_TREE_BIN != sh.valTargetKind(parent));
-  std::cout << "  segTreeAbstractionStep: setting parent as abstract" << std::endl;
 
 //  abstractNonMatchingValues(sh, left, parent);
-  std::cout << "  segTreeAbstractionStep: abstracting values" << std::endl;
 
 //        SymHeap                     &sh,
 //        const TValId                at,
@@ -597,7 +593,6 @@ bool segTreeAbstractionStep(
 //    if (len)
 //        // declare resulting segment's minimal length
 //        sh.segSetMinLength(nextAt, len);
-  std::cout << "  <<< segTreeAbstractionStep (false)" << std::endl;
   return false;
 }
 
@@ -677,7 +672,6 @@ bool considerAbstraction(
         const TValId                entry,
         const unsigned              lenTotal)
 {
-    std::cout << ">>> considerAbstraction (entry=" << entry << ", off=(" << off.head << ',' << off.next << ',' << off.prev << ',' << off.right << "))" << std::endl;
     EObjKind kind;
 // FIXME: [TREES] I do not give a crap about thresholds now.
 #if !SE_DISABLE_SLS || !SE_DISABLE_DLS
