@@ -208,11 +208,12 @@ bool validateSegEntry(
     return validatePrototypes(sh, off, entry, protoRoots);
 }
 
-TValId jumpToNextObj(
+TValId jumpToObj(
         SymHeap                     &sh,
         const BindingOff            &off,
         std::set<TValId>            &haveSeen,
-        TValId                      at)
+        TValId                      at,
+        bool                        which)
 {
     if (!matchSegBinding(sh, at, off))
         // binding mismatch
@@ -225,7 +226,12 @@ TValId jumpToNextObj(
         haveSeen.insert(at);
     }
 
-    const TValId nextHead = valOfPtrAt(sh, at, off.next);
+    TValId nextHead;
+    if (which)
+      nextHead = valOfPtrAt(sh, at, off.next);
+    else
+      nextHead = valOfPtrAt(sh, at, off.right);
+
     if (nextHead <= 0 || off.head != sh.valOffset(nextHead))
         // no valid head pointed by nextPtr
         return VAL_INVALID;
@@ -272,6 +278,26 @@ TValId jumpToNextObj(
         return VAL_INVALID;
 
     return next;
+}
+
+TValId jumpToNextObj(
+        SymHeap                     &sh,
+        const BindingOff            &off,
+        std::set<TValId>            &haveSeen,
+        TValId                      at)
+{
+  //FIXME: [TREES] Generalize for any value from the offset
+  //FIXME: [TREES] Un-bool the next parameter and create enum for it
+  return jumpToObj(sh, off, haveSeen, at, true);
+}
+
+TValId jumpToRightObj(
+        SymHeap                     &sh,
+        const BindingOff            &off,
+        std::set<TValId>            &haveSeen,
+        TValId                      at)
+{
+  return jumpToObj(sh, off, haveSeen, at, false);
 }
 
 typedef TValList TProtoRoots[2];
