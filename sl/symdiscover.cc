@@ -382,20 +382,69 @@ bool segTreeDiscover(
         const BindingOff            &off,
         const TValId                entry)
 {
+  //FIXME: [TREES] This is not used now
   std::set<TValId> haveSeen;
   haveSeen.insert(entry);
 
-  TValId left = jumpToNextObj(sh, off, haveSeen, entry);
-  TValId right = jumpToRightObj(sh, off, haveSeen, entry);
+  //Non-recursive post-order traversal
+  //FIXME: [TREES] Validation
+  //FIXME: [TREES] Cost
+  //FIXME: [TREES] Length by set.size()
+  std::stack<TValId> poStack;
+  *pLen = 0;
 
-  if ((!insertOnce(haveSeen, left)) || (!insertOnce(haveSeen, right))){
-    return false;
+  TValId curNode;
+  TValId curLeft;
+  TValId curRight;
+
+  TValId prevNode = VAL_INVALID;
+  TValId prevLeft = VAL_INVALID;
+  TValId prevRight = VAL_INVALID;
+
+  poStack.push(entry);
+  while (! poStack.empty()){
+    curNode = poStack.top();
+    curLeft = jumpToNextObj(sh, off, haveSeen, curNode);
+    curRight = jumpToRightObj(sh, off, haveSeen, curNode);
+
+    if ( prevNode != VAL_INVALID){
+      prevLeft = jumpToNextObj(sh, off, haveSeen, prevNode);
+      prevRight = jumpToRightObj(sh, off, haveSeen, prevNode);
+    }
+
+    if ((prevNode == VAL_INVALID) ||
+        (prevLeft == curNode) ||
+        (prevRight == curNode)){
+      if (curLeft != VAL_INVALID){
+        poStack.push(curLeft);
+      }
+      else if (curRight != VAL_INVALID){
+        poStack.push(curRight);
+      }
+      else{
+//        segTreeDiscoverNode(sh, off, curNode);
+        (*pLen)++;
+        poStack.pop();
+      }
+    }
+    else if (curLeft == prevNode){
+      if (curRight != VAL_INVALID){
+        poStack.push(curRight);
+      }
+      else{
+//        segTreeDiscoverNode(sh, off, curNode);
+        (*pLen)++;
+        poStack.pop();
+      }
+    }
+    else if (curRight == prevNode){
+//      segTreeDiscoverNode(sh, off, curNode);
+      (*pLen)++;
+      poStack.pop();
+    }
+    prevNode = curNode;
   }
 
-  if (left == VAL_INVALID && right == VAL_INVALID){
-    return false;
-  }
-  *pLen = 1;
   *pCost = 1;
   return true;
 }
