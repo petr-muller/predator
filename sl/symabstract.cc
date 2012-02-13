@@ -727,39 +727,82 @@ bool considerAbstraction(
     LDP_INIT(symabstract, name);
     LDP_PLOT(symabstract, sh);
 
+#if !SE_DISABLE_SLS || !SE_DISABLE_DLS
     for (unsigned i = 0; i < lenTotal; ++i) {
       // FIXME: [TREES] Temporary solution, will need to be removed.
-      if (!isTreeBinding(off)){
-        if (!segAbstractionStep(sh, off, &cursor)) {
-            CL_DEBUG("<-- validity of next " << (lenTotal - i - 1)
-                    << " abstraction step(s) broken, forcing re-discovery...");
+      if (!segAbstractionStep(sh, off, &cursor)) {
+          CL_DEBUG("<-- validity of next " << (lenTotal - i - 1)
+                  << " abstraction step(s) broken, forcing re-discovery...");
 
-            if (i)
-                return true;
+          if (i)
+              return true;
 
-            CL_BREAK_IF("segAbstractionStep() failed, nothing has been done");
-            return false;
-        }
+          CL_BREAK_IF("segAbstractionStep() failed, nothing has been done");
+          return false;
+      }
+      Trace::Node *trAbs = new Trace::AbstractionNode(sh.traceNode(), kind);
+      sh.traceUpdate(trAbs);
+      LDP_PLOT(symabstract, sh);
+    }
+#endif
+
+#if !SE_DISABLE_TREES
+    //FIXME: [TREES] Share code with the traversal in discovery
+  std::stack<TValId> poStack;
+
+  TValId curNode;
+  TValId curLeft;
+  TValId curRight;
+
+  TValId prevNode = VAL_NULL;
+  TValId prevLeft = VAL_NULL;
+  TValId prevRight = VAL_NULL;
+
+  poStack.push(entry);
+  while (! poStack.empty()){
+    curNode = poStack.top();
+    curLeft = nextRootObj(sh, curNode, off.next);
+    curRight = nextRootObj(sh, curNode, off.right);
+
+    if ( prevNode != VAL_NULL){
+      prevLeft = nextRootObj(sh, prevNode, off.next);
+      prevRight = nextRootObj(sh, prevNode, off.right);
+    }
+
+    if ((prevNode == VAL_NULL) ||
+        (prevLeft == curNode) ||
+        (prevRight == curNode)){
+      if (curLeft != VAL_NULL){
+        std::cout << curLeft << " - " << VAL_NULL << std::endl;
+        poStack.push(curLeft);
+      }
+      else if (curRight != VAL_NULL){
+        poStack.push(curRight);
       }
       else{
-      //FIXME: [TREES] Probably not stepped, but fired at once
-        if (!segTreeAbstractionStep(sh, off, &cursor)) {
-            CL_DEBUG("<-- validity of next " << (lenTotal - i - 1)
-                    << " abstraction step(s) broken, forcing re-discovery...");
-
-            if (i)
-                return true;
-
-            CL_BREAK_IF("segTreeAbstractionStep() failed, nothing has been done");
-            return false;
-        }
+//        segTreeDiscoverNode(sh, off, curNode);
+        poStack.pop();
       }
-
-        Trace::Node *trAbs = new Trace::AbstractionNode(sh.traceNode(), kind);
-        sh.traceUpdate(trAbs);
-
-        LDP_PLOT(symabstract, sh);
     }
+    else if (curLeft == prevNode){
+      if (curRight != VAL_NULL){
+        poStack.push(curRight);
+      }
+      else{
+//        segTreeDiscoverNode(sh, off, curNode);
+        poStack.pop();
+      }
+    }
+    else if (curRight == prevNode){
+//      segTreeDiscoverNode(sh, off, curNode);
+      poStack.pop();
+    }
+    prevNode = curNode;
+  }
+
+
+#endif
+
 
     CL_DEBUG("<-- successfully abstracted " << name);
     return true;
