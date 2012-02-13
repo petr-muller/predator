@@ -731,7 +731,6 @@ unsigned /* len */ selectBestAbstraction(
 #endif
 
 #if !SE_DISABLE_TREES
-        // it has to have at least two selectors to be a tree
         BOOST_FOREACH(const BindingOff &off, segc.offList) {
           if (isTreeBinding(off)){
             int len, cost;
