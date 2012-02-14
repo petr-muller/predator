@@ -542,22 +542,48 @@ bool /* jump next */ dlSegAbstractionStep(
     }
 }
 
-// FIXME: [TREES] Temporary tree-specific abstraction
-bool segTreeAbstractionStep(
+void createAbstractTree(
+        SymHeap                     &sh,
+        TValId                      *node,
+        const BindingOff            &off,
+        TValId                      terminator,
+        TValId                      hole)
+{
+  sh.valTargetSetAbstract(*node, OK_TREE_BIN, off);
+}
+
+void absorbSubtrees(
         SymHeap                     &sh,
         const BindingOff            &off,
-        TValId                      *pCursor)
+        TValId                      *node,
+        TValId                      *left,
+        TValId                      *right)
 {
-  const TValId parent = *pCursor;
-  TValId peer = parent;
+  sh.valReplace(*left, VAL_NULL);
+  sh.valReplace(*right, VAL_NULL);
 
-  const TValId left = nextRootObj(sh, peer, off.next);
-  const TValId right = nextRootObj(sh, peer, off.right);
+  REQUIRE_GC_ACTIVITY(sh, *left, absorbSubtrees);
+  REQUIRE_GC_ACTIVITY(sh, *right, absorbSubtrees);
 
-  TMinLen len = objMinLength(sh, parent);
-  len += objMinLength(sh, left);
-  sh.valTargetSetAbstract(parent, OK_TREE_BIN, off);
-  CL_BREAK_IF(OK_TREE_BIN != sh.valTargetKind(parent));
+}
+
+// FIXME: [TREES] Temporary tree-specific abstraction
+bool segTreeAbstractNode(
+        SymHeap                     &sh,
+        const BindingOff            &off,
+        TValId                      *node,
+        TValId                      *left,
+        TValId                      *right)
+{
+  //FIXME: [TREES] Perform a pointed-at check
+  if (*left == VAL_NULL && *right == VAL_NULL){
+    createAbstractTree(sh, node, off, VAL_NULL, VAL_NULL);
+  }
+  else if (sh.valTargetKind(*left) == OK_TREE_BIN &&
+           sh.valTargetKind(*right) == OK_TREE_BIN){
+    createAbstractTree(sh, node, off, VAL_NULL, VAL_NULL);
+    absorbSubtrees(sh, off, node, left, right);
+  }
 
 //  abstractNonMatchingValues(sh, left, parent);
 
@@ -773,14 +799,13 @@ bool considerAbstraction(
         (prevLeft == curNode) ||
         (prevRight == curNode)){
       if (curLeft != VAL_NULL){
-        std::cout << curLeft << " - " << VAL_NULL << std::endl;
         poStack.push(curLeft);
       }
       else if (curRight != VAL_NULL){
         poStack.push(curRight);
       }
       else{
-//        segTreeDiscoverNode(sh, off, curNode);
+        segTreeAbstractNode(sh, off, &curNode, &curLeft, &curRight);
         poStack.pop();
       }
     }
@@ -789,12 +814,12 @@ bool considerAbstraction(
         poStack.push(curRight);
       }
       else{
-//        segTreeDiscoverNode(sh, off, curNode);
+        segTreeAbstractNode(sh, off, &curNode, &curLeft, &curRight);
         poStack.pop();
       }
     }
     else if (curRight == prevNode){
-//      segTreeDiscoverNode(sh, off, curNode);
+      segTreeAbstractNode(sh, off, &curNode, &curLeft, &curRight);
       poStack.pop();
     }
     prevNode = curNode;
