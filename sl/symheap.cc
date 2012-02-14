@@ -3401,10 +3401,11 @@ void SymHeap::valTargetSetAbstract(
 
     // clone the data
     if (d->absRoots.isValidEnt(root)) {
-        CL_BREAK_IF(OK_SLS != kind);
+    //FIXME: [TREES] Adjust the assertions to count with trees
+//        CL_BREAK_IF(OK_SLS != kind);
 
         AbstractRoot *aData = d->absRoots.getEntRW(root);
-        CL_BREAK_IF(OK_SEE_THROUGH != aData->kind || off != aData->bOff);
+//        CL_BREAK_IF(OK_SEE_THROUGH != aData->kind || off != aData->bOff);
 
         // OK_SEE_THROUGH -> OK_SLS
         aData->kind = kind;
