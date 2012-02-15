@@ -58,6 +58,17 @@ inline PtrHandle nextPtrFromSeg(const SymHeap &sh, TValId seg) {
     return PtrHandle(const_cast<SymHeap &>(sh), addr);
 }
 
+/// return 'right' pointer in the given segment (given by root)
+inline PtrHandle rightPtrFromSeg(const SymHeap &sh, TValId seg) {
+    CL_BREAK_IF(sh.valOffset(seg));
+    CL_BREAK_IF(VT_ABSTRACT != sh.valTarget(seg));
+    CL_BREAK_IF(OK_TREE_BIN != sh.valTargetKind(seg));
+
+    const BindingOff &off = sh.segBinding(seg);
+    const TValId addr = const_cast<SymHeap &>(sh).valByOffset(seg, off.right);
+    return PtrHandle(const_cast<SymHeap &>(sh), addr);
+}
+
 /// return 'prev' pointer in the given segment (given by root)
 inline PtrHandle prevPtrFromSeg(const SymHeap &sh, TValId seg) {
     CL_BREAK_IF(sh.valOffset(seg));
