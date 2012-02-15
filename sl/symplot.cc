@@ -298,7 +298,8 @@ enum EObjectClass {
     OC_PTR,
     OC_NEXT,
     OC_PREV,
-    OC_DATA
+    OC_DATA,
+    OC_TREE
 };
 
 struct AtomicObject {
@@ -324,6 +325,15 @@ struct AtomicObject {
     {
     }
 };
+
+void plotTreeHole(PlotData &plot){
+    const char *props = ", penwidth=3.0, style=dashed";
+    const char *color = "cyan";
+    plot.out << "\t" << "HOLE"
+        << " [shape=box, color=" << color
+        << ", fontcolor=" << color << props
+        << ", label=\"HOLE\"];\n";
+}
 
 void plotAtomicObj(PlotData &plot, const AtomicObject &ao, const bool lonely)
 {
@@ -362,6 +372,10 @@ void plotAtomicObj(PlotData &plot, const AtomicObject &ao, const bool lonely)
         case OC_DATA:
             color = "gray";
             props = ", style=dotted";
+
+        case OC_TREE:
+            color = "cyan";
+            break;
     }
 
     if (lonely) {
@@ -428,6 +442,8 @@ void plotInnerObjects(PlotData &plot, const TValId at, const TCont &liveObjs)
 
     ObjHandle next;
     ObjHandle prev;
+    ObjHandle left;
+    ObjHandle right;
     const EObjKind kind = sh.valTargetKind(at);
     switch (kind) {
         case OK_CONCRETE:
@@ -442,11 +458,12 @@ void plotInnerObjects(PlotData &plot, const TValId at, const TCont &liveObjs)
         case OK_SLS:
             next = nextPtrFromSeg(sh, at);
             break;
+
         case OK_TREE_BIN:
-            // Did not study this function, a guess for now.
-            // FIXME: [TREES] Implement correctly.
-            // TODO:  [TREES] Study this function.
-            next = nextPtrFromSeg(sh, at);
+            left = nextPtrFromSeg(sh, at);
+            right = rightPtrFromSeg(sh, at);
+            plotTreeHole(plot);
+            break;
     }
 
     // sort objects by offset
@@ -459,6 +476,8 @@ void plotInnerObjects(PlotData &plot, const TValId at, const TCont &liveObjs)
             code = OC_NEXT;
         else if (obj == prev)
             code = OC_PREV;
+        else if (obj == left || obj == right)
+            code = OC_TREE;
         else if (isDataPtr(obj.objType()))
             code = OC_PTR;
         else
@@ -474,7 +493,7 @@ void plotInnerObjects(PlotData &plot, const TValId at, const TCont &liveObjs)
         const TOffset off = item.first;
         BOOST_FOREACH(const AtomicObject &ao, /* TAtomList */ item.second) {
             // plot a single object
-            plotAtomicObj(plot, ao, /* lonely */ false);
+            plotAtomicObj(plot, ao, /* lon;ely */ false);
 
             // connect the inner object with the root by an offset edge
             plotOffset(plot, off, at, ao.obj.objId());

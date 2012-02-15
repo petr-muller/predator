@@ -60,6 +60,12 @@ enum TObjId {
     OBJ_UNKNOWN       = -3,
 
     /**
+     * special enumeration value denoting an object inside an abstract tree
+     * pointing outside. OBJ_TREEHOLE may never appear outside of abstract tree
+     * and represents existing, but abstracted away object. @n @n
+     */
+    OBJ_TREEHOLE      = -4,
+    /**
      * sort of non-portable hack, abusing enumeration type for integral purposes
      */
     OBJ_MAX_ID        = /* XXX */ UINT_MAX
