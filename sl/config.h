@@ -55,7 +55,7 @@
 /**
  * if 1, plot each abstraction/concretization step to a separate heap graph
  */
-#define DEBUG_SYMABSTRACT                   0
+#define DEBUG_SYMABSTRACT                   1
 
 /**
  * if 1, plot some interesting operations as being performed by symcall
