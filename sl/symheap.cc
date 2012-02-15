@@ -3278,22 +3278,49 @@ bool SymHeapCore::proveNeq(TValId valA, TValId valB) const {
 
 // /////////////////////////////////////////////////////////////////////////////
 // implementation of SymHeap
+
+// FIXME: [TREES] This should really be split and objectized or something
+//                We are just mimicking proper ownership control. Struct with
+//                'kind' field almost cries for inheritance, dammit :/
+//
+//                Objectization is currently prevented by AbstractRoot container
+//                somewhere deep in SymHeap, which should probably contain just
+//                pointers.
 struct AbstractRoot {
     RefCounter                      refCnt;
 
     EObjKind                        kind;
     BindingOff                      bOff;
-    TMinLen                         minLength;
+    TMinLen                         minLength;   // list specific
+    TValId                          terminator;  // tree specific
+    TValId                          hole;        // tree specific
 
     AbstractRoot(EObjKind kind_, BindingOff bOff_):
         kind(kind_),
         bOff(bOff_),
-        minLength(0)
+        minLength(0),
+        terminator(VAL_INVALID),
+        hole(VAL_INVALID)
     {
     }
 
     AbstractRoot* clone() const {
         return new AbstractRoot(*this);
+    }
+
+    void setLength(int newLen){
+      CL_BREAK_IF(kind == OK_TREE_BIN);
+      this->minLength = newLen;
+    }
+
+    void setTerminator(TValId terminator_){
+      CL_BREAK_IF(kind != OK_TREE_BIN);
+      this->terminator = terminator_;
+    }
+
+    void setHole(TValId hole_){
+      CL_BREAK_IF(kind != OK_TREE_BIN);
+      this->hole = hole_;
     }
 };
 
