@@ -564,7 +564,6 @@ void absorbSubtrees(
 
   REQUIRE_GC_ACTIVITY(sh, *left, absorbSubtrees);
   REQUIRE_GC_ACTIVITY(sh, *right, absorbSubtrees);
-
 }
 
 // FIXME: [TREES] Temporary tree-specific abstraction
