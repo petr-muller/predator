@@ -227,6 +227,12 @@ const std::string& CustomValue::str() const {
     return *data_.str;
 }
 
+/// eliminates the warning 'comparing floating point with == or != is unsafe'
+inline bool areEqual(const double a, const double b) {
+    return (a <= b)
+        && (b <= a);
+}
+
 bool operator==(const CustomValue &a, const CustomValue &b) {
     const ECustomValue code = a.code_;
     if (b.code_ != code)
@@ -240,7 +246,8 @@ bool operator==(const CustomValue &a, const CustomValue &b) {
             return (a.data_.uid == b.data_.uid);
 
         case CV_REAL:
-            return (a.data_.fpn == b.data_.fpn);
+            // just for convenience, no need to compare CV_REAL for equality
+            return areEqual(a.data_.fpn, b.data_.fpn);
 
         case CV_STRING:
             CL_BREAK_IF(!a.data_.str || !b.data_.str);
@@ -1786,8 +1793,9 @@ void SymHeapCore::objSetValue(TObjId obj, TValId val, TValSet *killedPtrs) {
     const HeapObject *objData;
     d->ents.getEntRO(&objData, obj);
 
+    // make sure that the value is not a pointer to a structure object
     const TObjType clt = objData->clt;
-    CL_BREAK_IF(isComposite(clt, /* includingArray */ false));
+    CL_BREAK_IF(VT_COMPOSITE == this->valTarget(val));
 
     // check whether the root entity that owns this object ID is still valid
     CL_BREAK_IF(!isPossibleToDeref(this->valTarget(objData->root)));
