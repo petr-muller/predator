@@ -297,9 +297,7 @@ void SymProc::varInit(TValId at) {
         // nothing to do at this level (already handled by SymExecCore)
         return;
 
-    SymExecCoreParams ep;
-    ep.skipVarInit = /* avoid an infinite recursion */ true;
-    SymExecCore core(sh_, bt_, ep);
+    SymExecCore core(sh_, bt_);
     BOOST_FOREACH(const CodeStorage::Insn *insn, var.initials) {
         const struct cl_loc *loc = &insn->loc;
         core.setLocation(loc);
@@ -515,15 +513,8 @@ TValId SymProc::valFromOperand(const struct cl_operand &op) {
 }
 
 bool SymProc::fncFromOperand(int *pUid, const struct cl_operand &op) {
-    if (CL_OPERAND_CST == op.code) {
-        // direct call
-        const struct cl_cst &cst = op.data.cst;
-        if (CL_TYPE_FNC != cst.code)
-            return false;
-
-        *pUid = cst.data.cst_fnc.uid;
+    if (fncUidFromOperand(pUid, &op))
         return true;
-    }
 
     // assume indirect call
     const TValId val = this->valFromOperand(op);
@@ -769,7 +760,7 @@ void SymProc::objSetValue(const ObjHandle &lhs, TValId rhs) {
         return;
     }
 
-    if ((VT_COMPOSITE != sh_.valTarget(rhs))) {
+    if (VT_COMPOSITE != sh_.valTarget(rhs)) {
         // not a composite object
         objSetAtomicVal(*this, lhs, rhs);
         return;
@@ -1087,10 +1078,6 @@ void executeMemmove(
 // /////////////////////////////////////////////////////////////////////////////
 // SymExecCore implementation
 void SymExecCore::varInit(TValId at) {
-    if (ep_.skipVarInit)
-        // we are explicitly asked to not initialize any vars
-        return;
-
     if (ep_.trackUninit && VT_ON_STACK == sh_.valTarget(at)) {
         // uninitialized stack variable
         const TValId tpl = sh_.valCreate(VT_UNKNOWN, VO_STACK);
