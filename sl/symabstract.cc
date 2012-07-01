@@ -181,13 +181,6 @@ void clonePrototypes(
     }
 }
 
-void decrementProtoLevel(SymHeap &sh, const TValId at) {
-    TValList protoList;
-    collectPrototypesOf(protoList, sh, at, /* skipDlsPeers */ true);
-    BOOST_FOREACH(const TValId proto, protoList)
-        objDecrementProtoLevel(sh, proto);
-}
-
 struct ValueSynchronizer {
     SymHeap            &sh;
     TObjSet             ignoreList;
@@ -230,21 +223,6 @@ void dlSegSyncPeerData(SymHeap &sh, const TValId dls) {
     traverseLiveObjs<2>(sh, roots, visitor);
 }
 
-// FIXME: this works only for nullified blocks anyway
-void killUniBlocksUnderBindingPtrs(SymHeap &sh, const TValId seg) {
-    // go through next/prev pointers
-    TObjSet blackList;
-    buildIgnoreList(blackList, sh, seg);
-    BOOST_FOREACH(const ObjHandle &obj, blackList) {
-        if (VAL_NULL != obj.value())
-            continue;
-
-        // if there is a nullified block under next/prev pointer, kill it now
-        obj.setValue(VAL_TRUE);
-        obj.setValue(VAL_NULL);
-    }
-}
-
 // when abstracting an object, we need to abstract all non-matching values in
 void abstractNonMatchingValues(
         SymHeap                     &sh,
@@ -252,10 +230,6 @@ void abstractNonMatchingValues(
         const TValId                dstAt,
         const bool                  bidir = false)
 {
-    killUniBlocksUnderBindingPtrs(sh, dstAt);
-    if (bidir)
-        killUniBlocksUnderBindingPtrs(sh, srcAt);
-
     if (!joinData(sh, dstAt, srcAt, bidir))
         CL_BREAK_IF("joinData() failed, failure of segDiscover()?");
 
@@ -287,19 +261,11 @@ TValId segDeepCopy(SymHeap &sh, TValId seg) {
 
 void enlargeMayExist(SymHeap &sh, const TValId at) {
     const EObjKind kind = sh.valTargetKind(at);
-    switch (kind) {
-        case OK_SEE_THROUGH:
-            decrementProtoLevel(sh, at);
-            sh.valTargetSetConcrete(at);
-            // fall through!
+    if (!isMayExistObj(kind))
+        return;
 
-        case OK_CONCRETE:
-        case OK_SLS:
-            return;
-
-        default:
-            CL_BREAK_IF("invalid call of enlargeMayExist()");
-    }
+    decrementProtoLevel(sh, at);
+    sh.valTargetSetConcrete(at);
 }
 
 void slSegAbstractionStep(
@@ -704,18 +670,13 @@ void concretizeObj(
     const EObjKind kind = sh.valTargetKind(seg);
     sh.traceUpdate(new Trace::ConcretizationNode(sh.traceNode(), kind));
 
-    switch (kind) {
-        case OK_OBJ_OR_NULL:
-        case OK_SEE_THROUGH:
-            // these kinds are much easier than regular list segments
-            sh.valTargetSetConcrete(seg);
-            decrementProtoLevel(sh, seg);
-            LDP_PLOT(symabstract, sh);
-            CL_BREAK_IF(!protoCheckConsistency(sh));
-            return;
-
-        default:
-            break;
+    if (isMayExistObj(kind)) {
+        // these kinds are much easier than regular list segments
+        sh.valTargetSetConcrete(seg);
+        decrementProtoLevel(sh, seg);
+        LDP_PLOT(symabstract, sh);
+        CL_BREAK_IF(!protoCheckConsistency(sh));
+        return;
     }
 
     // duplicate self as abstract object (including all prototypes)

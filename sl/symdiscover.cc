@@ -39,7 +39,7 @@
 bool matchSegBinding(
         const SymHeap               &sh,
         const TValId                seg,
-        const BindingOff            &offDiscover)
+        const BindingOff            &offPath)
 {
     const EObjKind kind = sh.valTargetKind(seg);
     switch (kind) {
@@ -48,24 +48,24 @@ bool matchSegBinding(
             return true;
 
         case OK_OBJ_OR_NULL:
-            // OK_OBJ_OR_NULL on the path --> withdraw it!
-            return false;
+            // OK_OBJ_OR_NULL can be the last node of a NULL-terminated list
+            return true;
 
         default:
             break;
     }
 
-    const BindingOff off = sh.segBinding(seg);
-    if (off.head != offDiscover.head)
+    const BindingOff offObj = sh.segBinding(seg);
+    if (offObj.head != offPath.head)
         // head mismatch
         return false;
 
-    if (!isDlsBinding(offDiscover)) {
+    if (!isDlsBinding(offPath)) {
         // OK_SLS
         switch (kind) {
             case OK_SEE_THROUGH:
             case OK_SLS:
-                return (off.next == offDiscover.next);
+                return (offObj.next == offPath.next);
 
             default:
                 return false;
@@ -74,12 +74,16 @@ bool matchSegBinding(
 
     // OK_DLS
     switch (kind) {
-        case OK_SEE_THROUGH:
-            return (off.next == offDiscover.next);
+        case OK_SEE_THROUGH_2N:
+            if ((offObj.next == offPath.next) && (offObj.prev == offPath.prev))
+                // both fields are equal
+                return true;
+
+            // fall through!
 
         case OK_DLS:
-            return (off.next == offDiscover.prev)
-                && (off.prev == offDiscover.next);
+            return (offObj.next == offPath.prev)
+                && (offObj.prev == offPath.next);
 
         default:
             return false;

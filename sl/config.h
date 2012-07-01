@@ -196,7 +196,7 @@
  * - 1 ... join only when traversing a loop-closing edge, entailment otherwise
  * - 2 ... join only when traversing a loop-closing edge, isomorphism otherwise
  */
-#define SE_JOIN_ON_LOOP_EDGES_ONLY          0
+#define SE_JOIN_ON_LOOP_EDGES_ONLY          2
 
 /**
  * maximal call depth
@@ -247,13 +247,14 @@
  * - 0 ... disable tracking non-pointer values
  * - 1 ... basic tracking of non-pointer values
  * - 2 ... expensive tracking of pointer values
+ * - 3 ... track also code pointers
  */
 #define SE_TRACK_NON_POINTER_VALUES         2
 
 /**
  * if 1, use a DFS scheduler at the level of basic blocks; if 0, use BFS
  */
-#define SE_USE_DFS_SCHEDULER                0
+#define SE_USE_DFS_SCHEDULER                1
 
 /**
  * if 1, do not make deep copy on copy of SymHeap [experimental]

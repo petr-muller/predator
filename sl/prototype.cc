@@ -112,3 +112,34 @@ bool collectPrototypesOf(
     buildIgnoreList(collector.ignoreList(), sh, root);
     return traverseLivePtrs(sh, root, collector);
 }
+
+void objChangeProtoLevel(SymHeap &sh, TValId root, const TProtoLevel diff) {
+    CL_BREAK_IF(sh.valOffset(root));
+
+    const TProtoLevel level = sh.valTargetProtoLevel(root);
+    sh.valTargetSetProtoLevel(root, level + diff);
+
+    const EObjKind kind = sh.valTargetKind(root);
+    if (OK_DLS != kind)
+        return;
+
+    const TValId peer = dlSegPeer(sh, root);
+    CL_BREAK_IF(sh.valTargetProtoLevel(peer) != level);
+
+    sh.valTargetSetProtoLevel(peer, level + diff);
+}
+
+void objIncrementProtoLevel(SymHeap &sh, TValId root) {
+    objChangeProtoLevel(sh, root, 1);
+}
+
+void objDecrementProtoLevel(SymHeap &sh, TValId root) {
+    objChangeProtoLevel(sh, root, -1);
+}
+
+void decrementProtoLevel(SymHeap &sh, const TValId at) {
+    TValList protoList;
+    collectPrototypesOf(protoList, sh, at, /* skipDlsPeers */ true);
+    BOOST_FOREACH(const TValId proto, protoList)
+        objDecrementProtoLevel(sh, proto);
+}
