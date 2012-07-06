@@ -160,7 +160,6 @@ struct SymJoinCtx {
 
     typedef std::map<TValId /* seg */, TMinLen /* len */>       TSegLengths;
     TSegLengths                 segLengths;
-    std::set<TValPair>          sharedNeqs;
 
     std::set<TValPair>          tieBreaking;
     std::set<TValPair>          alreadyJoined;
@@ -260,8 +259,6 @@ void dump_ctx(const SymJoinCtx &ctx) {
     // sumarize aux containers
     cout << "    ctx.segLengths     .size() = " << ctx.segLengths.size()
         << "\n";
-    cout << "    ctx.sharedNeqs     .size() = " << ctx.sharedNeqs.size()
-        << "\n";
     cout << "    ctx.alreadyJoined  .size() = " << ctx.alreadyJoined.size()
         << "\n";
     cout << "    ctx.protoRoots     .size() = " << ctx.protoRoots.size()
@@ -298,54 +295,6 @@ bool updateJoinStatus(SymJoinCtx &ctx, const EJoinStatus action) {
         || ctx.allowThreeWay;
 }
 
-/**
- * if Neq(v1, vDst) exists in ctx.sh1 and Neq(v2, vDst) exists in ctx.sh2,
- * declare the Neq relation as @b shared, such that it later appears in ctx.dst
- * @note it respects value ID mapping among all symbolic heaps
- */
-void gatherSharedPreds(
-        SymJoinCtx              &ctx,
-        const TValId            v1,
-        const TValId            v2,
-        const TValId            vDst)
-{
-    // look for shared Neq predicates
-    TValList rVals1;
-    ctx.sh1.gatherRelatedValues(rVals1, v1);
-    BOOST_FOREACH(const TValId rel1, rVals1) {
-        if (!ctx.sh1.SymHeapCore::proveNeq(v1, rel1))
-            // not a Neq in sh1
-            continue;
-
-        TValMap &vMap1 = ctx.valMap1[/* ltr */ 0];
-        TValMap::const_iterator it1 = vMap1.find(rel1);
-        if (vMap1.end() == it1)
-            // related value has not (yet?) any mapping to dst
-            continue;
-
-        const TValId relDst = it1->second;
-        TValMap &vMap2r = ctx.valMap2[/* rtl */ 1];
-        TValMap::const_iterator it2r = vMap2r.find(relDst);
-        if (vMap2r.end() == it2r)
-            // related value has not (yet?) any mapping back to sh2
-            continue;
-
-        const TValId rel2 = it2r->second;
-        if (!ctx.sh2.SymHeapCore::proveNeq(v2, rel2))
-            // not a Neq in sh2
-            continue;
-
-        // sort Neq values
-        TValId valLt = vDst;
-        TValId valGt = relDst;
-        sortValues(valLt, valGt);
-
-        // insert a shared Neq predicate
-        const TValPair neq(valLt, valGt);
-        ctx.sharedNeqs.insert(neq);
-    }
-}
-
 /// define value mapping for the given value triple (v1, v2, vDst)
 bool defineValueMapping(
         SymJoinCtx              &ctx,
@@ -363,15 +312,11 @@ bool defineValueMapping(
     const bool ok2 = !hasValue2
         || matchPlainValues(ctx.valMap2, ctx.sh2, ctx.dst, v2, vDst);
 
-    if (!ok1 || !ok2) {
-        SJ_DEBUG("<-- value mapping mismatch " << SJ_VALP(v1, v2));
-        return false;
-    }
+    if (ok1 && ok2)
+        return true;
 
-    if (hasValue1 && hasValue2)
-        gatherSharedPreds(ctx, v1, v2, vDst);
-
-    return true;
+    SJ_DEBUG("<-- value mapping mismatch " << SJ_VALP(v1, v2));
+    return false;
 }
 
 bool matchRanges(
@@ -424,16 +369,16 @@ bool joinRangeValues(
     IR::Range rng = join(rng1, rng2);
 
     // [experimental] widening on offset ranges
-#if 1 < SE_ALLOW_OFF_RANGES
     if (!isSingular(rng1) && !isSingular(rng2)) {
+#if (SE_ALLOW_OFF_RANGES & 0x2)
         if (rng.lo == rng1.lo || rng.lo == rng2.lo)
             rng.hi = IR::IntMax;
-#   if 2 < SE_ALLOW_OFF_RANGES
+#endif
+#if (SE_ALLOW_OFF_RANGES & 0x4)
         if (rng.hi == rng1.hi || rng.hi == rng2.hi)
             rng.lo = IR::IntMin;
-#   endif
-    }
 #endif
+    }
 
     if (!isCovered(rng, rng1) && !updateJoinStatus(ctx, JS_USE_SH2))
         return false;
@@ -1016,33 +961,30 @@ bool joinNestingLevel(
 
     TProtoLevel level1 = ctx.sh1.valTargetProtoLevel(root1);
     TProtoLevel level2 = ctx.sh2.valTargetProtoLevel(root2);
+
+    if (ctx.joiningData()) {
+        // if one of the starting points is not yet abstract, compensate it!
+
+        if (rootNotYetAbstract(ctx.sh1, ctx.sset1))
+            ++level1;
+
+        if (rootNotYetAbstract(ctx.sh2, ctx.sset2))
+            ++level2;
+    }
+
     *pDst = std::max(level1, level2);
 
     if (ctx.joiningData() && root1 == root2)
         // shared data
         return true;
 
-    if (ctx.joiningDataReadWrite())
-        // symabstract.cc already decreased the level of prototypes hanging
-        // under abstract objects (this may work better the other way around)
-        ++(*pDst);
-
     if (VAL_INVALID == root2 || VAL_INVALID == root1)
         // we got only one object, just take its level as it is
         return true;
 
-    TProtoLevel ldiff = level1 - level2;
-    if (ctx.joiningDataReadWrite()) {
-        // symabstract.cc gives the first object to joinData() always abstract
-        CL_BREAK_IF(rootNotYetAbstract(ctx.sh1, ctx.sset1));
-
-        // the other one can be concrete or abstract, we have to compensate it
-        if (rootNotYetAbstract(ctx.sh2, ctx.sset2))
-            ++ldiff;
-    }
-
     // check that the computed ldiff matches the actual one
-    return (item.ldiff == ldiff);
+    const TProtoLevel ldiff = level1 - level2;
+    return (ldiff == item.ldiff);
 }
 
 TMinLen joinMinLength(
@@ -1130,7 +1072,6 @@ void joinUniBlocksCore(
     TUniBlockMap bMap1, bMap2;
     sh1.gatherUniformBlocks(bMap1, root1);
     sh2.gatherUniformBlocks(bMap2, root2);
-    CL_BREAK_IF(bMap1.empty() && bMap2.empty());
 
     BOOST_FOREACH(TUniBlockMap::const_reference item, bMap1) {
         UniformBlock bl2(item.second);
@@ -1195,11 +1136,6 @@ bool joinUniBlocks(
         hasExtra1 = true;
         ctx.sh2.gatherUniformBlocks(bMapDst, root2);
         importBlockMap(&bMapDst, ctx.dst, /* src */ ctx.sh2);
-    }
-    else if (matchUniBlocks(ctx.sh1, ctx.sh2, root1, root2)) {
-        // block maps are 100% equal, pick any
-        ctx.sh1.gatherUniformBlocks(bMapDst, root1);
-        importBlockMap(&bMapDst, ctx.dst, /* src */ ctx.sh1);
     }
     else
         joinUniBlocksCore(&bMapDst, &hasExtra1, &hasExtra2, ctx, root1, root2);
@@ -1432,7 +1368,7 @@ bool joinCustomValues(
     }
 #endif
 
-#if !SE_ALLOW_INT_RANGES
+#if !(SE_ALLOW_INT_RANGES & 0x1)
     // avoid creation of a CV_INT_RANGE value from two CV_INT values
     if (isSingular(rng1) && isSingular(rng2)) {
         const TValId vDst = ctx.dst.valCreate(VT_UNKNOWN, VO_UNKNOWN);
@@ -1442,16 +1378,16 @@ bool joinCustomValues(
 #endif
 
     // [experimental] widening on intervals
-#if 1 < SE_ALLOW_INT_RANGES
     if (!isSingular(rng1) && !isSingular(rng2)) {
+#if (SE_ALLOW_INT_RANGES & 0x2)
         if (rng.lo == rng1.lo || rng.lo == rng2.lo)
             rng.hi = IR::IntMax;
-#   if 2 < SE_ALLOW_INT_RANGES
+#endif
+#if (SE_ALLOW_INT_RANGES & 0x4)
         if (rng.hi == rng1.hi || rng.hi == rng2.hi)
             rng.lo = IR::IntMin;
-#   endif
-    }
 #endif
+    }
 
     if (!isCovered(rng, rng1) && !updateJoinStatus(ctx, JS_USE_SH2))
         return false;
@@ -1974,7 +1910,7 @@ bool offRangeFallback(
         const TValId            v1,
         const TValId            v2)
 {
-#if !SE_ALLOW_OFF_RANGES
+#if !(SE_ALLOW_OFF_RANGES & 0x1)
     return false;
 #endif
 
@@ -2657,22 +2593,6 @@ bool handleDstPreds(SymJoinCtx &ctx) {
         ctx.dst.segSetMinLength(seg, len);
     }
 
-    // go through shared Neq predicates
-    BOOST_FOREACH(const TValPair &neq, ctx.sharedNeqs) {
-        TValId valLt, valGt;
-        boost::tie(valLt, valGt) = neq;
-
-        const TValId targetLt = ctx.dst.valRoot(valLt);
-        const TValId targetGt = ctx.dst.valRoot(valGt);
-        if (hasKey(ctx.segLengths, targetLt)
-                || hasKey(ctx.segLengths, targetGt))
-            // preserve segment length
-            continue;
-
-        // handle generic Neq predicate
-        ctx.dst.neqOp(SymHeap::NEQ_ADD, valLt, valGt);
-    }
-
     if (!ctx.joiningData()) {
         // cross-over check of Neq predicates
 
@@ -2874,7 +2794,17 @@ bool joinDataCore(
         // preserve estimated type-info of the root
         ctx.dst.valSetLastKnownTypeOfTarget(rootDstAt, clt);
 
-    const SchedItem rootItem(addr1, addr2, /* ldiff */ 0);
+    TProtoLevel ldiff = 0;
+
+    const EObjKind kind1 = sh.valTargetKind(addr1);
+    if (OK_CONCRETE != kind1)
+        --ldiff;
+
+    const EObjKind kind2 = sh.valTargetKind(addr2);
+    if (OK_CONCRETE != kind2)
+        ++ldiff;
+
+    const SchedItem rootItem(addr1, addr2, ldiff);
     if (!traverseRoots(ctx, rootDstAt, rootItem, &off))
         return false;
 
@@ -2882,13 +2812,13 @@ bool joinDataCore(
     ctx.sset2.insert(addr2);
 
     // never step over DLS peer
-    if (OK_DLS == sh.valTargetKind(addr1)) {
+    if (OK_DLS == kind1) {
         const TValId peer = dlSegPeer(sh, addr1);
         ctx.sset1.insert(peer);
         if (peer != addr2)
             mapGhostAddressSpace(ctx, addr1, peer, JS_USE_SH1);
     }
-    if (OK_DLS == sh.valTargetKind(addr2)) {
+    if (OK_DLS == kind2) {
         const TValId peer = dlSegPeer(sh, addr2);
         ctx.sset2.insert(peer);
         if (peer != addr1)
@@ -3029,11 +2959,12 @@ void restorePrototypeLengths(SymJoinCtx &ctx) {
 
 void transferContentsOfGhost(
         SymHeap                 &sh,
+        const BindingOff        &bf,
         const TValId            dst,
         const TValId            ghost)
 {
     TObjSet ignoreList;
-    buildIgnoreList(ignoreList, sh, dst);
+    buildIgnoreList(ignoreList, sh, dst, bf);
 
     ObjList live;
     sh.gatherLiveObjects(live, ghost);
@@ -3053,9 +2984,9 @@ void transferContentsOfGhost(
     }
 }
 
-/// replacement of matchData() from symdiscover
-bool joinData(
+void joinData(
         SymHeap                 &sh,
+        const BindingOff        &bf,
         const TValId            dst,
         const TValId            src,
         const bool              bidir)
@@ -3065,13 +2996,13 @@ bool joinData(
 
     // used only for debugging (in case the debugging is enabled)
     bool isomorphismWasExpected = false;
-
-    // dst is expected to be a segment
-    CL_BREAK_IF(!isAbstract(sh.valTarget(dst)));
-    const BindingOff off(sh.segBinding(dst));
+#ifndef NDEBUG
+    SymHeap inputHeapSnap(sh);
+#endif
     if (debuggingSymJoin) {
         EJoinStatus status = JS_USE_ANY;
-        joinDataReadOnly(&status, sh, off, dst, src, 0);
+        if (!joinDataReadOnly(&status, sh, bf, dst, src, 0))
+            CL_BREAK_IF("joinDataReadOnly() fails, why joinData() is called?");
         if (JS_USE_ANY == status)
             isomorphismWasExpected = true;
         else
@@ -3080,22 +3011,24 @@ bool joinData(
 
     // go through the common part of joinData()/joinDataReadOnly()
     SymJoinCtx ctx(sh);
-    if (!joinDataCore(ctx, off, dst, src)) {
+    if (!joinDataCore(ctx, bf, dst, src)) {
         CL_BREAK_IF("joinData() has failed, did joinDataReadOnly() succeed?");
-        return false;
+        return;
     }
 
-    if (!updateMayExistLevels(ctx))
-        return false;
+    if (!updateMayExistLevels(ctx)) {
+        CL_BREAK_IF("updateMayExistLevels() has failed in joinData()");
+        return;
+    }
 
     // ghost is a transiently existing object representing the join of dst/src
     const TValId ghost = roMapLookup(ctx.valMap1[0], dst);
     CL_BREAK_IF(ghost != roMapLookup(ctx.valMap2[0], src));
 
     // assign values within dst (and also in src if bidir == true)
-    transferContentsOfGhost(ctx.dst, dst, ghost);
+    transferContentsOfGhost(ctx.dst, bf, dst, ghost);
     if (bidir)
-        transferContentsOfGhost(ctx.dst, src, ghost);
+        transferContentsOfGhost(ctx.dst, bf, src, ghost);
 
     // redirect some edges if necessary
     recoverPrototypes(ctx, dst, ghost);
@@ -3111,6 +3044,4 @@ bool joinData(
         if (isomorphismWasExpected)
             CL_BREAK_IF("joinData() status differs from joinDataReadOnly()");
     }
-
-    return true;
 }

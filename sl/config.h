@@ -100,20 +100,20 @@
 #define SE_ALLOW_SUBPATH_RANKING            0
 
 /**
- * - 0 ... avoid creation of a new integral range from two integral constants
- * - 1 ... allow to create integral ranges from integral constants if needed
- * - 2 ... same as above, additionally use widening in upward direction [broken]
- * - 3 ... same as above, additionally use widening in both directions [broken]
+ * bit mask of allowed operations on integral ranges
+ * - 0x1 ... allow to create integral ranges from integral constants if needed
+ * - 0x2 ... allow widening of the upper bound of integral ranges
+ * - 0x4 ... allow widening of the lower bound of integral ranges
  */
-#define SE_ALLOW_INT_RANGES                 0
+#define SE_ALLOW_INT_RANGES                 0x6
 
 /**
- * - 0 ... do not use values with offset specified by int ranges (VT_RANGE)
- * - 1 ... allow to use values with offset specified by int ranges (VT_RANGE)
- * - 2 ... same as above, additionally use widening in upward direction [broken]
- * - 3 ... same as above, additionally use widening in both directions [broken]
+ * bit mask of allowed operations on values with offset specified by int ranges
+ * - 0x1 ... allow to introduce values with offset specified by integral ranges
+ * - 0x2 ... allow widening of the upper bound of values with offset ranges
+ * - 0x4 ... allow widening of the upper lower of values with offset ranges
  */
-#define SE_ALLOW_OFF_RANGES                 1
+#define SE_ALLOW_OFF_RANGES                 0x1
 
 /**
  * how much do we allow to use three-way join
@@ -128,6 +128,14 @@
  * if 1, assume that the contents of static data is initialized on first access
  */
 #define SE_ASSUME_FRESH_STATIC_DATA         1
+
+/**
+ * - 0 ... use BFS scheduler
+ * - 1 ... use DFS scheduler, keep already scheduled blocks at their position
+ * - 2 ... use DFS scheduler, move already scheduled blocks to front of queue
+ * - 3 ... use load-driven scheduler (picks the one with fewer pending heaps)
+ */
+#define SE_BLOCK_SCHEDULER_KIND             2
 
 /**
  * call cache miss count that will trigger function removal (0 means disabled)
@@ -195,8 +203,9 @@
  * - 0 ... join states on each basic block entry
  * - 1 ... join only when traversing a loop-closing edge, entailment otherwise
  * - 2 ... join only when traversing a loop-closing edge, isomorphism otherwise
+ * - 3 ... same as 2 but skips the isomorphism check when considered redundant
  */
-#define SE_JOIN_ON_LOOP_EDGES_ONLY          2
+#define SE_JOIN_ON_LOOP_EDGES_ONLY          3
 
 /**
  * maximal call depth
@@ -230,11 +239,27 @@
 #define SE_RESTRICT_SLS_MINLEN              2
 
 /**
- * - 0 ... keep state info for all basic blocks of a function (safe default)
- * - 1 ... keep state info for all basic blocks with more than one ingoing edge
- * - 2 ... keep state info for all basic blocks that a CFG loop starts with
+ * if non-zero, reorder list of state on the fly upon hit ratio [experimental]
  */
-#define SE_STATE_PRUNING_MODE               0
+#define SE_STATE_ON_THE_FLY_ORDERING        1
+
+/**
+ * - 0 ... keep state info for all basic blocks of a function
+ * - 1 ... keep state info for all basic blocks except trivial basic blocks
+ * - 2 ... keep state info for all basic blocks with more than one ingoing edge
+ * - 3 ... keep state info for all basic blocks that a CFG loop starts with
+ */
+#define SE_STATE_PRUNING_MODE               1
+
+/**
+ * prune non-loop blocks on reaching the count of join misses (0 means disabled)
+ */
+#define SE_STATE_PRUNING_MISS_THR           0x20
+
+/**
+ * prune non-loop blocks on reaching the count of states (0 means disabled)
+ */
+#define SE_STATE_PRUNING_TOTAL_THR          0x80
 
 /**
  * if 1, the symcut module allows generic minimal lengths to survive a function
@@ -250,11 +275,6 @@
  * - 3 ... track also code pointers
  */
 #define SE_TRACK_NON_POINTER_VALUES         2
-
-/**
- * if 1, use a DFS scheduler at the level of basic blocks; if 0, use BFS
- */
-#define SE_USE_DFS_SCHEDULER                1
 
 /**
  * if 1, do not make deep copy on copy of SymHeap [experimental]
