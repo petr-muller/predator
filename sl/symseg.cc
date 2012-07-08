@@ -100,6 +100,45 @@ TValId segClone(SymHeap &sh, const TValId root) {
     return dup;
 }
 
+TValId lookThrough(const SymHeap &sh, TValId val, TValSet *pSeen) {
+    if (VT_RANGE == sh.valTarget(val))
+        // not supported yet
+        return VAL_INVALID;
+
+    const TOffset off = sh.valOffset(val);
+
+    while (0 < val) {
+        if (pSeen && !insertOnce(*pSeen, val))
+            // an already seen value
+            break;
+
+        const EValueTarget code = sh.valTarget(val);
+        if (!isAbstract(code))
+            // a non-abstract object reached
+            break;
+
+        const TValId root = sh.valRoot(val);
+        const TValId seg = segPeer(sh, root);
+        if (sh.segMinLength(seg))
+            // non-empty abstract object reached
+            break;
+
+        const EObjKind kind = sh.valTargetKind(seg);
+        if (OK_OBJ_OR_NULL == kind) {
+            // we always end up with VAL_NULL if OK_OBJ_OR_NULL is removed
+            val = VAL_NULL;
+            continue;
+        }
+
+        // jump to next value while taking the 'head' offset into consideration
+        const TValId valNext = nextValFromSeg(sh, seg);
+        const BindingOff &bOff = sh.segBinding(seg);
+        val = const_cast<SymHeap &>(sh).valByOffset(valNext, off - bOff.head);
+    }
+
+    return val;
+}
+
 bool dlSegCheckConsistency(const SymHeap &sh) {
     TValList addrs;
     sh.gatherRootObjects(addrs, isAbstract);
@@ -129,32 +168,6 @@ bool dlSegCheckConsistency(const SymHeap &sh) {
         const TMinLen len2 = sh.segMinLength(peer);
         if (len1 != len2) {
             CL_ERROR("peer of a DLS " << len1 << "+ is a DLS" << len2 << "+");
-            return false;
-        }
-    }
-
-    // all OK
-    return true;
-}
-
-bool protoCheckConsistency(const SymHeap &sh) {
-    TValList addrs;
-    sh.gatherRootObjects(addrs);
-    BOOST_FOREACH(const TValId root, addrs) {
-        const EValueTarget code = sh.valTarget(root);
-        if (isAbstract(code))
-            continue;
-
-        const TProtoLevel rootLevel = sh.valTargetProtoLevel(root);
-
-        ObjList ptrs;
-        sh.gatherLivePointers(ptrs, root);
-        BOOST_FOREACH(const ObjHandle &obj, ptrs) {
-            const TProtoLevel level = sh.valTargetProtoLevel(obj.value());
-            if (level <= rootLevel)
-                continue;
-
-            CL_ERROR("nesting level bump on a non-abstract object detected");
             return false;
         }
     }

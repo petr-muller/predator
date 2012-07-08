@@ -69,7 +69,7 @@ inline PtrHandle prevPtrFromSeg(const SymHeap &sh, TValId seg) {
 }
 
 /// return the value of 'next' in the given segment (given by root)
-inline TValId nextValFromSeg(SymHeap &sh, TValId seg) {
+inline TValId nextValFromSeg(const SymHeap &sh, TValId seg) {
     if (OK_OBJ_OR_NULL == sh.valTargetKind(seg))
         return VAL_NULL;
 
@@ -220,16 +220,13 @@ inline void buildIgnoreList(
         ignoreList.insert(prev);
 }
 
+/// look through possibly empty objects and return the value seen
+TValId lookThrough(const SymHeap &sh, TValId val, TValSet *pSeen = 0);
+
 /**
  * returns true if all DLS in the given symbolic heap are consistent
  * @note this runs in debug build only
  */
 bool dlSegCheckConsistency(const SymHeap &sh);
-
-/**
- * returns true if no concrete object points to another object of a higher level
- * @note this runs in debug build only
- */
-bool protoCheckConsistency(const SymHeap &sh);
 
 #endif /* H_GUARD_SYMSEG_H */
