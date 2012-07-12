@@ -793,8 +793,6 @@ class SymHeap: public SymHeapCore {
 
     public:
         // just overrides (inherits the dox)
-        virtual void neqOp(ENeqOp op, TValId valA, TValId valB);
-        virtual bool proveNeq(TValId valA, TValId valB) const;
         virtual void valDestroyTarget(TValId);
         virtual TValId valClone(TValId);
 
@@ -804,8 +802,6 @@ class SymHeap: public SymHeapCore {
     private:
         struct Private;
         Private *d;
-
-        void segMinLengthOp(ENeqOp op, TValId at, TMinLen len);
 };
 
 /// enable/disable built-in self-checks (takes effect only in debug build)

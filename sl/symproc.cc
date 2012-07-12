@@ -941,7 +941,7 @@ bool checkForOverlap(
 {
     const TValId rootDst = sh.valRoot(valDst);
     const TValId rootSrc = sh.valRoot(valSrc);
-    if (sh.proveNeq(rootDst, rootSrc))
+    if (segProveNeq(sh, rootDst, rootSrc))
         // the roots are proven to be two distinct roots
         return false;
 
@@ -1313,7 +1313,7 @@ TValId compareValues(
     const bool neg = cTraits.negative;
     if ((v1 == v2) && cTraits.preserveNeq)
         return boolToVal(!neg);
-    if (sh.proveNeq(v1, v2) && cTraits.preserveEq)
+    if (segProveNeq(sh, v1, v2) && cTraits.preserveEq)
         return boolToVal(neg);
 
     const EValueTarget code1 = sh.valTarget(v1);
@@ -1504,7 +1504,7 @@ bool spliceOutAbstractPath(
         CL_BREAK_IF(readOnlyMode);
 
         dlSegReplaceByConcrete(sh, seg, peer);
-        sh.traceUpdate(new Trace::SpliceOutNode(sh.traceNode(), OK_DLS));
+        sh.traceUpdate(new Trace::SpliceOutNode(sh.traceNode(), /* len */ 1));
         return true;
     }
 
@@ -1624,8 +1624,9 @@ bool reflectCmpResult(
         if (!cTraits.preserveNeq)
             goto fail;
 
-        // introduce a Neq predicate over v1 and v2
-        sh.neqOp(SymHeap::NEQ_ADD, v1, v2);
+        if (!segApplyNeq(sh, v1, v2))
+            // introduce a Neq predicate over v1 and v2
+            sh.neqOp(SymHeap::NEQ_ADD, v1, v2);
     }
     else {
         if (!cTraits.preserveEq)
