@@ -57,7 +57,7 @@
 /**
  * if 1, plot each abstraction/concretization step to a separate heap graph
  */
-#define DEBUG_SYMABSTRACT                   0
+#define DEBUG_SYMABSTRACT                   1
 
 /**
  * if 1, plot some interesting operations as being performed by symcall
@@ -92,7 +92,7 @@
 /**
  * if 1, do not perform abstraction on each end of BB, but only when looping
  */
-#define SE_ABSTRACT_ON_LOOP_EDGES_ONLY      1
+#define SE_ABSTRACT_ON_LOOP_EDGES_ONLY      0
 
 /*
  * if non-zero, allow incomplete discovery paths with lower costs to apply
@@ -155,12 +155,12 @@
 /**
  * if 1, do not use DLS (Doubly-linked List Segment) abstraction
  */
-#define SE_DISABLE_DLS                      0
+#define SE_DISABLE_DLS                      1
 
 /**
  * if 1, do not use SLS (Singly-linked List Segment) abstraction
  */
-#define SE_DISABLE_SLS                      0
+#define SE_DISABLE_SLS                      1
 
 /**
  * if 1, do not use the @b symcut module at all
@@ -172,7 +172,7 @@
  * - 1 ... dump a single trace graph for all errors/warnings (may be huge)
  * - 2 ... dump a single trace graph for each error/warning
  */
-#define SE_DUMP_TRACE_GRAPHS                1
+#define SE_DUMP_TRACE_GRAPHS                0
 
 /**
  * - 0 ... kill local variables only on stack frame destruction
