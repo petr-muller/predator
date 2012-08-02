@@ -73,4 +73,37 @@ void abstractIfNeeded(SymHeap &sh);
 /// enable/disable debugging of symabstract
 void debugSymAbstract(const bool enable);
 
+class AbstractionHint {
+    protected:
+        unsigned int collapsed;
+        int cost;
+        TValId entry;
+        EObjKind kind; // [TRESS] FIXME: Duplicate of being a class member?
+        std::string name;
+    public:
+        virtual ~AbstractionHint(){};
+        void setCollapsed(unsigned int coll) { this->collapsed = coll; }
+        void setCost(int cost) { this->cost = cost; }
+        void setEntry(TValId entry) { this->entry = entry; }
+
+        unsigned int getCollapsed() const { return this->collapsed; }
+        int getCost() const { return this->cost; }
+
+        bool betterThan(const AbstractionHint &other) const { return ((this->cost <= other.getCost())
+                                                             && (this->collapsed > other.getCollapsed())); }
+        virtual bool fireAbstraction(SymHeap  &sh) = 0;
+};
+
+// [TREES] FIXME: Should this be converted to SLS/DLS?
+// [TREES] FIXME: Consider moving setBinding() stuff to a constructor
+//                to avoid partially initialized objects
+class AbstractionHintList : public AbstractionHint {
+    private:
+        BindingOff off;
+    public:
+        virtual ~AbstractionHintList() {};
+        void setBinding(const BindingOff &off);
+        virtual bool fireAbstraction(SymHeap &sh);
+};
+
 #endif /* H_GUARD_SYMABSTRACT_H */

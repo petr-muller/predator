@@ -26,6 +26,7 @@
 #include <cl/storage.hh>
 
 #include "prototype.hh"
+#include "symabstract.hh"
 #include "symcmp.hh"
 #include "symdebug.hh"
 #include "symjoin.hh"
@@ -452,37 +453,31 @@ bool segAbstractionStep(
     return true;
 }
 
-bool applyAbstraction(
-        SymHeap                     &sh,
-        const BindingOff            &off,
-        const TValId                entry,
-        const unsigned              len)
-{
-    EObjKind kind;
-    const char *name;
-
-    if (isDlsBinding(off)) {
-        kind = OK_DLS;
-        name = "DLS";
+void AbstractionHintList::setBinding(const BindingOff &off) {
+    this->off = off;
+    if (isDlsBinding(off)){
+        this->kind = OK_DLS;
+        this->name = "DLS";
+     }
+    else{
+        this->kind = OK_SLS;
+        this->name = "SLS";
     }
-    else {
-        kind = OK_SLS;
-        name = "SLS";
-    }
+}
 
-    CL_DEBUG("    AAA initiating " << name << " abstraction of length " << len);
-
+bool AbstractionHintList::fireAbstraction(SymHeap &sh){
+    CL_DEBUG("    AAA initiating " << this->name << " abstraction of length " << this->collapsed);
     // cursor
     TValId cursor = entry;
 
-    LDP_INIT(symabstract, name);
+    LDP_INIT(symabstract, this->name);
     LDP_PLOT(symabstract, sh);
 
-    for (unsigned i = 0; i < len; ++i) {
+    for (unsigned i = 0; i < this->collapsed; ++i) {
         CL_BREAK_IF(!protoCheckConsistency(sh));
 
-        if (!segAbstractionStep(sh, off, &cursor)) {
-            CL_DEBUG("<-- validity of next " << (len - i - 1)
+        if (!segAbstractionStep(sh, this->off, &cursor)) {
+            CL_DEBUG("<-- validity of next " << (this->collapsed - i - 1)
                     << " abstraction step(s) broken, forcing re-discovery...");
 
             if (i)
@@ -502,6 +497,11 @@ bool applyAbstraction(
 
     CL_DEBUG("<-- successfully abstracted " << name);
     return true;
+}
+
+// [TREES] FIXME: Perhaps an unecessary layer
+bool applyAbstraction(SymHeap &sh, AbstractionHint *hint){
+    return hint->fireAbstraction(sh);
 }
 
 void dlSegReplaceByConcrete(SymHeap &sh, TValId seg, TValId peer) {
@@ -611,12 +611,10 @@ void abstractIfNeeded(SymHeap &sh) {
 #if SE_DISABLE_SLS && SE_DISABLE_DLS
     return;
 #endif
-    BindingOff          off;
-    TValId              entry;
-    unsigned            len;
+    AbstractionHint *hint = NULL;
 
-    while ((len = discoverBestAbstraction(sh, &off, &entry))) {
-        if (!applyAbstraction(sh, off, entry, len))
+    while ((hint = discoverBestAbstraction(sh))) {
+        if (!applyAbstraction(sh, hint))
             // the best abstraction given is unfortunately not good enough
             break;
 
