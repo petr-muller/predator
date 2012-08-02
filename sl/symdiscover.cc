@@ -594,6 +594,9 @@ AbstractionHint* selectBestAbstractionGeneric(
 //                    continue;
 //
         if ((good_list = segHintDiscover(sh, segc.offList[idx_i], segc.entry)) != NULL){
+          if (good_list->expensive())
+            continue;
+
           if (!best)
             best = good_list;
           else if (good_list->betterThan(*best)){
