@@ -2870,7 +2870,7 @@ bool joinDataReadOnly(
     SJ_DEBUG("--> joinDataReadOnly" << SJ_VALP(addr1, addr2));
     Trace::waiveCloneOperation(sh);
 
-    // go through the commont part of joinData()/joinDataReadOnly()
+    // go through the common part of joinData()/joinDataReadOnly()
     SymHeap tmp(sh.stor(), new Trace::TransientNode("joinDataReadOnly()"));
     SymJoinCtx ctx(tmp, sh);
 
