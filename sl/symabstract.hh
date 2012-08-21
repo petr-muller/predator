@@ -104,8 +104,6 @@ class AbstractionHintList : public AbstractionHint {
         virtual ~AbstractionHintList() {};
         void setBinding(const BindingOff &off);
         virtual bool fireAbstraction(SymHeap &sh);
-
-        bool expensive(){ return (this->collapsed <= ( this->cost >> 2 ) ); }
 };
 
 #endif /* H_GUARD_SYMABSTRACT_H */
