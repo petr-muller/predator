@@ -512,6 +512,14 @@ bool AbstractionHintList::fireAbstraction(SymHeap &sh){
     return true;
 }
 
+void AbstractionHintList::enlargeIfBetter(int cost, unsigned int collapsed){
+    if (!this->_betterThan(cost, collapsed))
+    {
+        this->setCollapsed(collapsed);
+        this->setCost(cost);
+    }
+}
+
 void dlSegReplaceByConcrete(SymHeap &sh, TValId seg, TValId peer)
 {
     LDP_INIT(symabstract, "dlSegReplaceByConcrete");

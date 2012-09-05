@@ -427,13 +427,15 @@ AbstractionHintList* segHintDiscover(
             maxCostOnPath = cost;
 
         // remember the longest path at this cost level
-        // FIXME: [TREES] Deal with ALLOW_SUBPATH_RANKING
         if (!discovered){
           discovered = new AbstractionHintList(entry, off);
         }
-
+#if SE_ALLOW_SUBPATH_RANKING
+        discovered->enlargeIfBetter(maxCostOnPath, path.size());
+#else
         discovered->setCollapsed(path.size());
         discovered->setCost(maxCostOnPath);
+#endif
 
         if (leaving)
             // we allow others to point at DLS end-point's _head_
@@ -587,7 +589,6 @@ AbstractionHint* selectBestAbstractionGeneric(
       int offsets = segc.offList.size();
       for (int idx_i=0; idx_i < offsets; idx_i++){
 #if !(SE_DISABLE_SLS && SE_DISABLE_DLS) // LIST-SPECIFIC
-// [TREES] FIXME: Implement the partial path (as is seen in segDiscover)
 // [TREES] FIXME: Deal with SE_COST_OF_SEG_INTRODUCTION
 // [TREES] FIXME: Deal with:
 //                 if (len < minLengthByCost(cost))

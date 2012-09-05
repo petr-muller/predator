@@ -110,6 +110,7 @@ class AbstractionHintList : public AbstractionHint {
         AbstractionHintList(TValId entry, const BindingOff &off);
         virtual ~AbstractionHintList() {};
         virtual bool fireAbstraction(SymHeap &sh);
+        void enlargeIfBetter(int cost, unsigned int collapsed);
 };
 
 #endif /* H_GUARD_SYMABSTRACT_H */
