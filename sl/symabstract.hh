@@ -87,7 +87,9 @@ class AbstractionHint {
         bool _betterThan(int _cost, unsigned int _collapsed) const { return ((this->cost <= _cost)
                                                                           && (this->collapsed > _collapsed)); }
     public:
-        AbstractionHint(TValId entry) { this->entry = entry; }
+        AbstractionHint(TValId entry) : collapsed(0),
+                                        cost(INT_MAX),
+                                        entry(entry) {}
         virtual ~AbstractionHint(){};
         void setCollapsed(unsigned int coll) { this->collapsed = coll; }
         void setCost(int cost) { this->cost = cost; }
@@ -105,7 +107,7 @@ class AbstractionHintList : public AbstractionHint {
     private:
         BindingOff off;
     public:
-        AbstractionHintList(const TValId entry, const BindingOff &off);
+        AbstractionHintList(TValId entry, const BindingOff &off);
         virtual ~AbstractionHintList() {};
         virtual bool fireAbstraction(SymHeap &sh);
 };
