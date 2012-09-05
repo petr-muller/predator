@@ -462,6 +462,25 @@ bool segAbstractionStep(
     return true;
 }
 
+unsigned int AbstractionHintList::minLengthByCost(int cost)
+{
+    // abstraction length thresholds are now configurable in config.h
+    static const int thrTable[] = {
+        (SE_COST0_LEN_THR),
+        (SE_COST1_LEN_THR),
+        (SE_COST2_LEN_THR)
+    };
+
+    static const int maxCost = sizeof(thrTable)/sizeof(thrTable[0]) - 1;
+    if (maxCost < cost)
+        cost = maxCost;
+
+    // Predator counts elementar merges whereas the paper counts objects on path
+    const int minLength = thrTable[cost] - 1;
+    CL_BREAK_IF(minLength < 1);
+    return minLength;
+}
+
 AbstractionHintList::AbstractionHintList(const TValId entry,
                                          const BindingOff &off) :
     AbstractionHint(entry)
@@ -512,7 +531,7 @@ bool AbstractionHintList::fireAbstraction(SymHeap &sh){
     return true;
 }
 
-void AbstractionHintList::enlargeIfBetter(int cost, unsigned int collapsed){
+void AbstractionHint::enlargeIfBetter(int cost, unsigned int collapsed){
     if (!this->_betterThan(cost, collapsed))
     {
         this->setCollapsed(collapsed);

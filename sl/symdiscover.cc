@@ -42,25 +42,6 @@
 #define SE_PROTO_COST_ASYM          1
 #define SE_PROTO_COST_THREEWAY      2
 
-int minLengthByCost(int cost)
-{
-    // abstraction length thresholds are now configurable in config.h
-    static const int thrTable[] = {
-        (SE_COST0_LEN_THR),
-        (SE_COST1_LEN_THR),
-        (SE_COST2_LEN_THR)
-    };
-
-    static const int maxCost = sizeof(thrTable)/sizeof(thrTable[0]) - 1;
-    if (maxCost < cost)
-        cost = maxCost;
-
-    // Predator counts elementar merges whereas the paper counts objects on path
-    const int minLength = thrTable[cost] - 1;
-    CL_BREAK_IF(minLength < 1);
-    return minLength;
-}
-
 bool matchSegBinding(
         const SymHeap               &sh,
         const TValId                seg,
@@ -590,12 +571,12 @@ AbstractionHint* selectBestAbstractionGeneric(
       for (int idx_i=0; idx_i < offsets; idx_i++){
 #if !(SE_DISABLE_SLS && SE_DISABLE_DLS) // LIST-SPECIFIC
 // [TREES] FIXME: Deal with SE_COST_OF_SEG_INTRODUCTION
-// [TREES] FIXME: Deal with:
-//                 if (len < minLengthByCost(cost))
-//                    // too short path at this cost level
-//                    continue;
-//
         if ((good_list = segHintDiscover(sh, segc.offList[idx_i], segc.entry)) != NULL){
+          if (!good_list->goodEnough()){
+            delete good_list;
+            continue;
+          }
+
           if (!best)
             best = good_list;
           else if (good_list->betterThan(*best)){

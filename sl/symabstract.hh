@@ -91,6 +91,7 @@ class AbstractionHint {
                                         cost(INT_MAX),
                                         entry(entry) {}
         virtual ~AbstractionHint(){};
+
         void setCollapsed(unsigned int coll) { this->collapsed = coll; }
         void setCost(int cost) { this->cost = cost; }
 
@@ -99,6 +100,9 @@ class AbstractionHint {
 
         bool betterThan(const AbstractionHint &other) const { return this->_betterThan(other.getCost(),
                                                                                        other.getCollapsed()); }
+        void enlargeIfBetter(int cost, unsigned int collapsed);
+
+        virtual bool goodEnough() = 0;
         virtual bool fireAbstraction(SymHeap  &sh) = 0;
 };
 
@@ -107,10 +111,12 @@ class AbstractionHintList : public AbstractionHint {
     private:
         BindingOff off;
     public:
+        static unsigned int minLengthByCost(int cost);
+
         AbstractionHintList(TValId entry, const BindingOff &off);
         virtual ~AbstractionHintList() {};
         virtual bool fireAbstraction(SymHeap &sh);
-        void enlargeIfBetter(int cost, unsigned int collapsed);
+        virtual bool goodEnough() { return (this->collapsed >= AbstractionHintList::minLengthByCost(this->cost)); }
 };
 
 #endif /* H_GUARD_SYMABSTRACT_H */
