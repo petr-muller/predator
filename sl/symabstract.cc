@@ -462,7 +462,10 @@ bool segAbstractionStep(
     return true;
 }
 
-void AbstractionHintList::setBinding(const BindingOff &off) {
+AbstractionHintList::AbstractionHintList(const TValId entry,
+                                         const BindingOff &off) :
+    AbstractionHint(entry)
+{
     this->off = off;
     if (isDlsBinding(off)){
         this->kind = OK_DLS;

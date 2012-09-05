@@ -427,14 +427,13 @@ AbstractionHintList* segHintDiscover(
             maxCostOnPath = cost;
 
         // remember the longest path at this cost level
-        if (!retval){
-          retval = new AbstractionHintList();
-          retval->setBinding(off);
-          retval->setEntry(entry);
+        // FIXME: [TREES] Deal with ALLOW_SUBPATH_RANKING
+        if (!discovered){
+          discovered = new AbstractionHintList(entry, off);
         }
 
-        retval->setCollapsed(path.size());
-        retval->setCost(maxCostOnPath);
+        discovered->setCollapsed(path.size());
+        discovered->setCost(maxCostOnPath);
 
         if (leaving)
             // we allow others to point at DLS end-point's _head_
@@ -445,7 +444,7 @@ AbstractionHintList* segHintDiscover(
         at = next;
     }
 
-    return retval;
+    return discovered;
 }
 
 class PtrFinder {

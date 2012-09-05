@@ -81,10 +81,10 @@ class AbstractionHint {
         EObjKind kind; // [TRESS] FIXME: Duplicate of being a class member?
         std::string name;
     public:
+        AbstractionHint(TValId entry) { this->entry = entry; }
         virtual ~AbstractionHint(){};
         void setCollapsed(unsigned int coll) { this->collapsed = coll; }
         void setCost(int cost) { this->cost = cost; }
-        void setEntry(TValId entry) { this->entry = entry; }
 
         unsigned int getCollapsed() const { return this->collapsed; }
         int getCost() const { return this->cost; }
@@ -95,14 +95,12 @@ class AbstractionHint {
 };
 
 // [TREES] FIXME: Should this be converted to SLS/DLS?
-// [TREES] FIXME: Consider moving setBinding() stuff to a constructor
-//                to avoid partially initialized objects
 class AbstractionHintList : public AbstractionHint {
     private:
         BindingOff off;
     public:
+        AbstractionHintList(const TValId entry, const BindingOff &off);
         virtual ~AbstractionHintList() {};
-        void setBinding(const BindingOff &off);
         virtual bool fireAbstraction(SymHeap &sh);
 };
 
