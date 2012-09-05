@@ -508,11 +508,6 @@ bool AbstractionHintList::fireAbstraction(SymHeap &sh){
     return true;
 }
 
-// [TREES] FIXME: Perhaps an unecessary layer
-bool applyAbstraction(SymHeap &sh, AbstractionHint *hint){
-    return hint->fireAbstraction(sh);
-}
-
 void dlSegReplaceByConcrete(SymHeap &sh, TValId seg, TValId peer)
 {
     LDP_INIT(symabstract, "dlSegReplaceByConcrete");
@@ -625,7 +620,7 @@ void abstractIfNeeded(SymHeap &sh)
     AbstractionHint *hint = NULL;
 
     while ((hint = discoverBestAbstraction(sh))) {
-        if (!applyAbstraction(sh, hint))
+        if (!hint->fireAbstraction(sh))
             // the best abstraction given is unfortunately not good enough
             break;
 
