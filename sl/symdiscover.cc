@@ -26,6 +26,7 @@
 
 #include "prototype.hh"
 #include "symcmp.hh"
+#include "symdiscover.hh"
 #include "symjoin.hh"
 #include "symseg.hh"
 #include "symutil.hh"
@@ -40,25 +41,6 @@
 #define SE_PROTO_COST_SYM           0
 #define SE_PROTO_COST_ASYM          1
 #define SE_PROTO_COST_THREEWAY      2
-
-int minLengthByCost(int cost)
-{
-    // abstraction length thresholds are now configurable in config.h
-    static const int thrTable[] = {
-        (SE_COST0_LEN_THR),
-        (SE_COST1_LEN_THR),
-        (SE_COST2_LEN_THR)
-    };
-
-    static const int maxCost = sizeof(thrTable)/sizeof(thrTable[0]) - 1;
-    if (maxCost < cost)
-        cost = maxCost;
-
-    // Predator counts elementar merges whereas the paper counts objects on path
-    const int minLength = thrTable[cost] - 1;
-    CL_BREAK_IF(minLength < 1);
-    return minLength;
-}
 
 bool matchSegBinding(
         const SymHeap               &sh,
@@ -351,14 +333,12 @@ bool matchData(
 
 typedef std::map<int /* cost */, int /* length */> TRankMap;
 
-void segDiscover(
-        TRankMap                    &dst,
+AbstractionHintList* segHintDiscover(
         SymHeap                     &sh,
         const BindingOff            &off,
         const TValId                entry)
 {
-    CL_BREAK_IF(!dst.empty());
-
+    AbstractionHintList* discovered = NULL;
     // we use std::set to detect loops
     std::set<TValId> haveSeen;
     haveSeen.insert(entry);
@@ -377,7 +357,7 @@ void segDiscover(
     TValId at = jumpToNextObj(sh, off, haveSeen, initialProtos, entry);
     if (!insertOnce(haveSeen, at))
         // loop detected
-        return;
+        return NULL;
 
     // we need a way to prefer lossless prototypes
     int maxCostOnPath = 0;
@@ -428,10 +408,15 @@ void segDiscover(
             maxCostOnPath = cost;
 
         // remember the longest path at this cost level
-#if !SE_ALLOW_SUBPATH_RANKING
-        dst.clear();
+        if (!discovered){
+          discovered = new AbstractionHintList(entry, off);
+        }
+#if SE_ALLOW_SUBPATH_RANKING
+        discovered->enlargeIfBetter(maxCostOnPath, path.size());
+#else
+        discovered->setCollapsed(path.size());
+        discovered->setCost(maxCostOnPath);
 #endif
-        dst[maxCostOnPath] = path.size();
 
         if (leaving)
             // we allow others to point at DLS end-point's _head_
@@ -441,6 +426,8 @@ void segDiscover(
         prev = at;
         at = next;
     }
+
+    return discovered;
 }
 
 class PtrFinder {
@@ -569,89 +556,49 @@ struct SegCandidate {
 
 typedef std::vector<SegCandidate> TSegCandidateList;
 
-unsigned /* len */ selectBestAbstraction(
+AbstractionHint* selectBestAbstractionGeneric(
         SymHeap                     &sh,
-        const TSegCandidateList     &candidates,
-        BindingOff                  *pOff,
-        TValId                      *entry)
+        const TSegCandidateList     &candidates)
 {
-  /*
-   * [TREES] FIXME: This procedure is very list-centric, with the notion of
-   * "length" and "cost". Perhaps there exists a way how to make it generic?
-   * e.g. length == number of collapsed elements etc.
-   * or split into several different methods
-   */
+    if (!candidates.size())
+        return NULL;
 
-    const unsigned cnt = candidates.size();
-    if (!cnt)
-        // no candidates given
-        return 0;
+    CL_DEBUG("--> initiating generic segment discovery, "
+            << candidates.size() << " entry candidate(s) given");
 
-    CL_DEBUG("--> initiating segment discovery, "
-            << cnt << " entry candidate(s) given");
-
-    // go through entry candidates
-    int                 bestLen     = 0;
-    int                 bestCost    = INT_MAX;
-    unsigned            bestIdx     = 0;
-    BindingOff          bestBinding;
-
-    for (unsigned idx = 0; idx < cnt; ++idx) {
-
-        // go through binding candidates
-        const SegCandidate &segc = candidates[idx];
-        BOOST_FOREACH(const BindingOff &off, segc.offList) {
-            TRankMap rMap;
-            segDiscover(rMap, sh, off, segc.entry);
-
-            // go through all cost/length pairs
-            BOOST_FOREACH(TRankMap::const_reference rank, rMap) {
-                const int len = rank.second;
-                if (len <= 0)
-                    continue;
-
-                int cost = rank.first;
-#if SE_COST_OF_SEG_INTRODUCTION
-                if (!segOnPath(sh, off, segc.entry, len))
-                    cost += (SE_COST_OF_SEG_INTRODUCTION);
+    AbstractionHint *best = NULL;
+#if !(SE_DISABLE_SLS && SE_DISABLE_DLS) // LIST-SPECIFIC
+    AbstractionHintList *good_list = NULL;
 #endif
 
-                if (len < minLengthByCost(cost))
-                    // too short path at this cost level
-                    continue;
+    BOOST_FOREACH(const SegCandidate &segc, candidates){
+      int offsets = segc.offList.size();
+      for (int idx_i=0; idx_i < offsets; idx_i++){
+#if !(SE_DISABLE_SLS && SE_DISABLE_DLS) // LIST-SPECIFIC
+// [TREES] FIXME: Deal with SE_COST_OF_SEG_INTRODUCTION
+        if ((good_list = segHintDiscover(sh, segc.offList[idx_i], segc.entry)) != NULL){
+          if (!good_list->goodEnough()){
+            delete good_list;
+            continue;
+          }
 
-                if (bestCost < cost)
-                    // we already got something cheaper
-                    continue;
-
-                if (len <= bestLen)
-                    // we already got something longer
-                    continue;
-
-                // update best candidate
-                bestIdx = idx;
-                bestLen = len;
-                bestCost = cost;
-                bestBinding = off;
-            }
+          if (!best)
+            best = good_list;
+          else if (good_list->betterThan(*best)){
+            // [TREES] FIXME: Does not seem very efficient
+            delete best;
+            best = good_list;
+          }
         }
+#endif
+      }
     }
 
-    if (!bestLen) {
-        CL_DEBUG("<-- no new segment found");
-        return 0;
-    }
-
-    // pick up the best candidate
-    *pOff = bestBinding;
-    *entry = candidates[bestIdx].entry;
-    return bestLen;
+    return best;
 }
 
-unsigned /* len */ discoverBestAbstraction(
-        SymHeap             &sh,
-        BindingOff          *off,
-        TValId              *entry)
+AbstractionHint* discoverBestAbstraction(
+        SymHeap             &sh)
 {
     TSegCandidateList candidates;
 
@@ -672,5 +619,5 @@ unsigned /* len */ discoverBestAbstraction(
         candidates.push_back(segc);
     }
 
-    return selectBestAbstraction(sh, candidates, off, entry);
+    return selectBestAbstractionGeneric(sh, candidates);
 }

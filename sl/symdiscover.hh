@@ -27,6 +27,7 @@
  */
 
 #include "config.h"
+#include "symabstract.hh"
 #include "symheap.hh"
 
 /// return true if the given binding is a DLS binding
@@ -49,9 +50,6 @@ inline bool isDlsBinding(const BindingOff &off)
  *
  * In case of failure (zero return value), *bf and *entry are undefined.
  */
-unsigned /* len */ discoverBestAbstraction(
-        SymHeap                 &sh,
-        BindingOff              *bf,
-        TValId                  *entry);
+AbstractionHint* discoverBestAbstraction(SymHeap &sh);
 
 #endif /* H_GUARD_SYMDISCOVER_H */
