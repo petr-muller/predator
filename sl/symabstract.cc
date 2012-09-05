@@ -467,15 +467,16 @@ AbstractionHintList::AbstractionHintList(const TValId entry,
     AbstractionHint(entry)
 {
     this->off = off;
-    if (isDlsBinding(off)){
+    if (isDlsBinding(off)) {
         this->kind = OK_DLS;
         this->name = "DLS";
-     }
-    else{
+    }
+    else {
         this->kind = OK_SLS;
         this->name = "SLS";
     }
 }
+
 
 bool AbstractionHintList::fireAbstraction(SymHeap &sh){
     CL_DEBUG("    AAA initiating " << this->name << " abstraction of length " << this->collapsed);

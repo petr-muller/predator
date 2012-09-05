@@ -357,7 +357,7 @@ AbstractionHintList* segHintDiscover(
         const BindingOff            &off,
         const TValId                entry)
 {
-    AbstractionHintList* retval = NULL;
+    AbstractionHintList* discovered = NULL;
     // we use std::set to detect loops
     std::set<TValId> haveSeen;
     haveSeen.insert(entry);
@@ -573,7 +573,7 @@ AbstractionHint* selectBestAbstractionGeneric(
         const TSegCandidateList     &candidates)
 {
     if (!candidates.size())
-      return NULL;
+        return NULL;
 
     CL_DEBUG("--> initiating generic segment discovery, "
             << candidates.size() << " entry candidate(s) given");
@@ -598,6 +598,7 @@ AbstractionHint* selectBestAbstractionGeneric(
           if (!best)
             best = good_list;
           else if (good_list->betterThan(*best)){
+            // [TREES] FIXME: Does not seem very efficient
             delete best;
             best = good_list;
           }

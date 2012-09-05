@@ -78,7 +78,10 @@ class AbstractionHint {
         unsigned int collapsed;
         int cost;
         TValId entry;
-        EObjKind kind; // [TRESS] FIXME: Duplicate of being a class member?
+
+        // [TRESS] FIXME: Duplicate of being a class member?
+        //  Thats not my decision to make
+        EObjKind kind;
         std::string name;
     public:
         AbstractionHint(TValId entry) { this->entry = entry; }
@@ -94,7 +97,7 @@ class AbstractionHint {
         virtual bool fireAbstraction(SymHeap  &sh) = 0;
 };
 
-// [TREES] FIXME: Should this be converted to SLS/DLS?
+// [TREES] FIXME: Should this be converted to SLS/DLS? See above.
 class AbstractionHintList : public AbstractionHint {
     private:
         BindingOff off;
