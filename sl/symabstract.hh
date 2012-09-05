@@ -83,6 +83,9 @@ class AbstractionHint {
         //  Thats not my decision to make
         EObjKind kind;
         std::string name;
+
+        bool _betterThan(int _cost, unsigned int _collapsed) const { return ((this->cost <= _cost)
+                                                                          && (this->collapsed > _collapsed)); }
     public:
         AbstractionHint(TValId entry) { this->entry = entry; }
         virtual ~AbstractionHint(){};
@@ -92,8 +95,8 @@ class AbstractionHint {
         unsigned int getCollapsed() const { return this->collapsed; }
         int getCost() const { return this->cost; }
 
-        bool betterThan(const AbstractionHint &other) const { return ((this->cost <= other.getCost())
-                                                             && (this->collapsed > other.getCollapsed())); }
+        bool betterThan(const AbstractionHint &other) const { return this->_betterThan(other.getCost(),
+                                                                                       other.getCollapsed()); }
         virtual bool fireAbstraction(SymHeap  &sh) = 0;
 };
 
