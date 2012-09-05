@@ -23,6 +23,7 @@
 /**
  * @file symdiscover.hh
  * public interface of list segment discovering algorithms
+ * [TREES] FIXME:      ^^^^^^^^^^^^ not anymore
  */
 
 #include "config.h"

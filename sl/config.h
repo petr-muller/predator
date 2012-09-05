@@ -170,6 +170,11 @@
 #define SE_DISABLE_ALIGNMENT_TRACKING       0
 
 /**
+ * if 1, do not use Tree abstraction
+ */
+#define SE_DISABLE_TREE                     0
+
+/**
  * if 1, do not use DLS (Doubly-linked List Segment) abstraction
  */
 #define SE_DISABLE_DLS                      1

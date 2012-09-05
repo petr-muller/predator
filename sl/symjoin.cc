@@ -2886,13 +2886,16 @@ bool joinDataReadOnly(
     SJ_DEBUG("--> joinDataReadOnly" << SJ_VALP(addr1, addr2));
     Trace::waiveCloneOperation(sh);
 
-    // go through the commont part of joinData()/joinDataReadOnly()
+    // go through the common part of joinData()/joinDataReadOnly()
     SymHeap tmp(sh.stor(), new Trace::TransientNode("joinDataReadOnly()"));
     SymJoinCtx ctx(tmp, sh);
 
     if (!joinDataCore(ctx, off, addr1, addr2))
         return false;
 
+    // [TREES] FIXME: This seems to do entirely different job, and should be
+    //                in its separate method? Or are these dependent on the
+    //                join output conditions?
     unsigned cntProto1 = 0;
     unsigned cntProto2 = 0;
 

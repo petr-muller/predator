@@ -711,11 +711,12 @@ inline bool isMayExistObj(const enum EObjKind kind)
     }
 }
 
+
 /// tuple of binding offsets assigned to abstract objects
 struct BindingOff {
     TOffset head;           ///< target offset
-    TOffset next;           ///< offset of the 'next' or 'r' pointer
-    TOffset prev;           ///< offset of the 'prev' or 'l' pointer
+    TOffset next;           ///< offset of the dds primary successor ptr
+    TOffset prev;           ///< offset of the dds predecessor ptr
 
     BindingOff():
         head(0),

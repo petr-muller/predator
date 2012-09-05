@@ -619,7 +619,7 @@ void spliceOutSegmentIfNeeded(
 
 void abstractIfNeeded(SymHeap &sh)
 {
-#if SE_DISABLE_SLS && SE_DISABLE_DLS
+#if SE_DISABLE_SLS && SE_DISABLE_DLS && SE_DISABLE_TREE
     return;
 #endif
     BindingOff          off;

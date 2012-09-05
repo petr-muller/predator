@@ -524,13 +524,17 @@ class ProbeEntryVisitor {
             // entry candidate found, check the back-link in case of DLL
             off.next = sh.valOffset(sub.placedAt());
             off.prev = off.next;
+
+        /* [TREES] FIXME: Proper branching of various combinations
+         *                of disabled/enabled abstractions
+         */
 #if !SE_DISABLE_DLS
-            digBackLink(&off, sh, root_, next);
+            digBackLink(&off, sh, root_, next); // if DLS
 #endif
 
-#if SE_DISABLE_SLS
+#if SE_DISABLE_SLS && !SE_DISABLE_DLS
             // allow only DLS abstraction
-            if (!isDlsBinding(off))
+            if (!isDlsBinding(off))             // if DLS && !(SLS || TREE)
                 return /* continue */ true;
 #endif
             // append a candidate
@@ -562,6 +566,7 @@ struct SegCandidate {
     TBindingCandidateList       offList;
 };
 
+
 typedef std::vector<SegCandidate> TSegCandidateList;
 
 unsigned /* len */ selectBestAbstraction(
@@ -570,6 +575,13 @@ unsigned /* len */ selectBestAbstraction(
         BindingOff                  *pOff,
         TValId                      *entry)
 {
+  /*
+   * [TREES] FIXME: This procedure is very list-centric, with the notion of
+   * "length" and "cost". Perhaps there exists a way how to make it generic?
+   * e.g. length == number of collapsed elements etc.
+   * or split into several different methods
+   */
+
     const unsigned cnt = candidates.size();
     if (!cnt)
         // no candidates given
