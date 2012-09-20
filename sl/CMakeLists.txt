@@ -44,6 +44,8 @@ add_library(sl SHARED
     symcall.cc
     symcmp.cc
     symcut.cc
+    symdiscover_list.cc
+    symdiscover_util.cc
     symdiscover.cc
     symdump.cc
     symexec.cc

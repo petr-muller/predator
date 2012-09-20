@@ -462,81 +462,6 @@ bool segAbstractionStep(
     return true;
 }
 
-unsigned int AbstractionHintList::minLengthByCost(int cost)
-{
-    // abstraction length thresholds are now configurable in config.h
-    static const int thrTable[] = {
-        (SE_COST0_LEN_THR),
-        (SE_COST1_LEN_THR),
-        (SE_COST2_LEN_THR)
-    };
-
-    static const int maxCost = sizeof(thrTable)/sizeof(thrTable[0]) - 1;
-    if (maxCost < cost)
-        cost = maxCost;
-
-    // Predator counts elementar merges whereas the paper counts objects on path
-    const int minLength = thrTable[cost] - 1;
-    CL_BREAK_IF(minLength < 1);
-    return minLength;
-}
-
-AbstractionHintList::AbstractionHintList(const TValId entry,
-                                         const BindingOff &off) :
-    AbstractionHint(entry)
-{
-    this->off = off;
-    if (isDlsBinding(off)) {
-        this->kind = OK_DLS;
-        this->name = "DLS";
-    }
-    else {
-        this->kind = OK_SLS;
-        this->name = "SLS";
-    }
-}
-
-
-bool AbstractionHintList::fireAbstraction(SymHeap &sh){
-    CL_DEBUG("    AAA initiating " << this->name << " abstraction of length " << this->collapsed);
-    // cursor
-    TValId cursor = entry;
-
-    LDP_INIT(symabstract, this->name);
-    LDP_PLOT(symabstract, sh);
-
-    for (unsigned i = 0; i < this->collapsed; ++i) {
-        CL_BREAK_IF(!protoCheckConsistency(sh));
-
-        if (!segAbstractionStep(sh, this->off, &cursor)) {
-            CL_DEBUG("<-- validity of next " << (this->collapsed - i - 1)
-                    << " abstraction step(s) broken, forcing re-discovery...");
-
-            if (i)
-                return true;
-
-            CL_BREAK_IF("segAbstractionStep() failed, nothing has been done");
-            return false;
-        }
-
-        Trace::Node *trAbs = new Trace::AbstractionNode(sh.traceNode(), kind);
-        sh.traceUpdate(trAbs);
-
-        LDP_PLOT(symabstract, sh);
-
-        CL_BREAK_IF(!protoCheckConsistency(sh));
-    }
-
-    CL_DEBUG("<-- successfully abstracted " << name);
-    return true;
-}
-
-void AbstractionHint::enlargeIfBetter(int cost, unsigned int collapsed){
-    if (!this->_betterThan(cost, collapsed))
-    {
-        this->setCollapsed(collapsed);
-        this->setCost(cost);
-    }
 }
 
 void dlSegReplaceByConcrete(SymHeap &sh, TValId seg, TValId peer)
@@ -648,7 +573,7 @@ void abstractIfNeeded(SymHeap &sh)
 #if SE_DISABLE_SLS && SE_DISABLE_DLS
     return;
 #endif
-    AbstractionHint *hint = NULL;
+    AbstractionDiscovery *hint = NULL;
 
     while ((hint = discoverBestAbstraction(sh))) {
         if (!hint->fireAbstraction(sh))
