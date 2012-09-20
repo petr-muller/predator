@@ -28,6 +28,7 @@
 
 #include "config.h"
 #include "symheap.hh"
+#include "symdiscover.hh"
 
 #include <list>
 
@@ -73,50 +74,6 @@ void abstractIfNeeded(SymHeap &sh);
 /// enable/disable debugging of symabstract
 void debugSymAbstract(const bool enable);
 
-class AbstractionHint {
-    protected:
-        unsigned int collapsed;
-        int cost;
-        TValId entry;
-
-        // [TRESS] FIXME: Duplicate of being a class member?
-        //  Thats not my decision to make
-        EObjKind kind;
-        std::string name;
-
-        bool _betterThan(int _cost, unsigned int _collapsed) const { return ((this->cost <= _cost)
-                                                                          && (this->collapsed > _collapsed)); }
-    public:
-        AbstractionHint(TValId entry) : collapsed(0),
-                                        cost(INT_MAX),
-                                        entry(entry) {}
-        virtual ~AbstractionHint(){};
-
-        void setCollapsed(unsigned int coll) { this->collapsed = coll; }
-        void setCost(int cost) { this->cost = cost; }
-
-        unsigned int getCollapsed() const { return this->collapsed; }
-        int getCost() const { return this->cost; }
-
-        bool betterThan(const AbstractionHint &other) const { return this->_betterThan(other.getCost(),
-                                                                                       other.getCollapsed()); }
-        void enlargeIfBetter(int cost, unsigned int collapsed);
-
-        virtual bool goodEnough() = 0;
-        virtual bool fireAbstraction(SymHeap  &sh) = 0;
-};
-
-// [TREES] FIXME: Should this be converted to SLS/DLS? See above.
-class AbstractionHintList : public AbstractionHint {
-    private:
-        BindingOff off;
-    public:
-        static unsigned int minLengthByCost(int cost);
-
-        AbstractionHintList(TValId entry, const BindingOff &off);
-        virtual ~AbstractionHintList() {};
-        virtual bool fireAbstraction(SymHeap &sh);
-        virtual bool goodEnough() { return (this->collapsed >= AbstractionHintList::minLengthByCost(this->cost)); }
-};
+#include "symabstract_list.hh"
 
 #endif /* H_GUARD_SYMABSTRACT_H */

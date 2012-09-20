@@ -39,11 +39,14 @@ add_library(sl SHARED
     prototype.cc
     sigcatch.cc
     symabstract.cc
+    symabstract_list.cc
     symbin.cc
     symbt.cc
     symcall.cc
     symcmp.cc
     symcut.cc
+    symdiscover_list.cc
+    symdiscover_util.cc
     symdiscover.cc
     symdump.cc
     symexec.cc

@@ -25,7 +25,7 @@
 #include <set>
 
 
-enum class box_type_e { bBox, bHead, bTypeInfo, bSel };
+enum class box_type_e { bBox, bTypeInfo, bSel };
 
 
 class AbstractBox
@@ -67,6 +67,11 @@ public:
 	bool isBox() const
 	{
 		return type_ == box_type_e::bBox;
+	}
+
+	bool isSelector() const
+	{
+		return box_type_e::bSel == type_;
 	}
 
 	size_t getArity() const
