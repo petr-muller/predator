@@ -155,7 +155,6 @@ struct SegCandidate {
     TBindingCandidateList       offList;
 };
 
-
 typedef std::vector<SegCandidate> TSegCandidateList;
 
 AbstractionDiscovery* selectBestAbstraction(
