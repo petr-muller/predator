@@ -39,6 +39,7 @@ add_library(sl SHARED
     prototype.cc
     sigcatch.cc
     symabstract.cc
+    symabstract_list.cc
     symbin.cc
     symbt.cc
     symcall.cc

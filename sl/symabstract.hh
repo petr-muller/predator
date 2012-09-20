@@ -74,5 +74,6 @@ void abstractIfNeeded(SymHeap &sh);
 /// enable/disable debugging of symabstract
 void debugSymAbstract(const bool enable);
 
+#include "symabstract_list.hh"
 
 #endif /* H_GUARD_SYMABSTRACT_H */
