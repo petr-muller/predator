@@ -36,30 +36,6 @@
 #include "connection_graph.hh"
 
 
-class NodeHead : public AbstractBox
-{
-private:  // data members
-
-	size_t size_;
-
-public:   // methods
-
-	NodeHead(size_t size) :
-		AbstractBox(box_type_e::bHead, 0),
-		size_(size)
-	{ }
-
-	size_t getSize() const
-	{
-		return size_;
-	}
-
-	virtual void toStream(std::ostream& os) const
-	{
-		os << "Node[" << this->getSize() << ']';
-	}
-};
-
 class TypeBox : public AbstractBox
 {
 private:  // data members
@@ -357,6 +333,11 @@ public:
 	const ConnectionGraph::CutpointSignature& getOutputSignature() const
 	{
 		return outputSignature_;
+	}
+
+	const std::string& getName() const
+	{
+		return name_;
 	}
 
 	const TreeAut* getInput() const
