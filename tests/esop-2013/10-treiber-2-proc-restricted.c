@@ -1,1 +1,0 @@
-../lock-free/treiber_stk-2_push_pop-restr.c
