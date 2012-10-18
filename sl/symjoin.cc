@@ -1010,6 +1010,18 @@ TMinLen joinMinLength(
 
     const TMinLen len1 = objMinLength(ctx.sh1, root1);
     const TMinLen len2 = objMinLength(ctx.sh2, root2);
+
+    // this would fix the FP on list-properties/list_flag_safe.c from SV-COMP'13
+#if 0
+    if (!ctx.joiningData() && (1 < len1 || 1 < len2)) {
+        const EObjKind kind1 = ctx.sh1.valTargetKind(root1);
+        const EObjKind kind2 = ctx.sh2.valTargetKind(root2);
+        if (OK_CONCRETE == kind1 || OK_CONCRETE == kind2)
+            // when doing joinSymHeaps(), some three way joins are destructive
+            ctx.allowThreeWay = false;
+    }
+#endif
+
     if (len1 < len2) {
         updateJoinStatus(ctx, JS_USE_SH1);
         return len1;
