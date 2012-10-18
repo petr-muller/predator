@@ -18,8 +18,10 @@ build-aux/xgcclib.sh \
 build-aux/make-tgz.sh \
 build-aux/README-ubuntu-release.patch \
 build-aux/cl-readme.patch \
+build-aux/sl-readme.patch \
 build-aux/cl-config.patch \
 build-aux/cl-switch-host.patch \
+build-aux/sl-switch-host.patch \
 build-aux/make-srpm.sh \
 build-aux/update-comments-in-tests.sh \
 build-aux/README-fedora-release.patch"
@@ -109,6 +111,7 @@ fi
 
 # adapt README-ubuntu
 if test xyes = "x$readme_sl"; then
+    patch README < "build-aux/sl-readme.patch"
     patch docs/README-fedora < "build-aux/README-fedora-release.patch"
     patch docs/README-ubuntu < "build-aux/README-ubuntu-release.patch"
     patch "switch-host-gcc.sh" < "build-aux/sl-switch-host.patch"

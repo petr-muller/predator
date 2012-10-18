@@ -1,18 +1,17 @@
 Building Predator on Ubuntu
 ===========================
-This part is common for all versions of Ubuntu we have tried:
+The below steps were successfully tested on a fresh installation of Ubuntu
+12.04.1 LTS (i386 and amd64):
 
-    sudo apt-get install \
-        cmake curl g++ gcc-4.6-multilib gcc-4.6-plugin-dev libboost-dev make
+sudo apt-get install \
+    cmake curl g++ gcc-4.6-multilib gcc-4.6-plugin-dev libboost-dev make
 
-    curl http://www.fit.vutbr.cz/~idudka/download/predator-2011-10-11-8a7846b.tar.gz \
-        | gzip -cd \
-        | tar x
+curl http://www.fit.vutbr.cz/~idudka/download/predator-2011-10-11-8a7846b.tar.gz \
+    | gzip -cd \
+    | tar x
 
-    cd predator-2011-10-11-8a7846b
+cd predator-2011-10-11-8a7846b
 
-    patch -p1 < build-aux/gcc-4.6.3.patch
+patch -p1 < build-aux/gcc-4.6.3.patch
 
-    ./switch-host-gcc.sh /usr/bin/gcc-4.6
-
-The steps above were successfully tested on a fresh installation of Ubuntu 12.04.1 LTS.
+./switch-host-gcc.sh /usr/bin/gcc-4.6
