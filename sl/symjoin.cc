@@ -2613,7 +2613,7 @@ bool handleDstPreds(SymJoinCtx &ctx)
         // cross-over check of Neq predicates
 
         if (!ctx.sh1.matchPreds(ctx.dst, ctx.valMap1[/* ltr */ 0])) {
-            if (!ctx.sh1.matchPreds(ctx.dst, ctx.valMap1[0], /* 0 only */ true))
+            if (ctx.sh1.matchPreds(ctx.dst, ctx.valMap1[0], /* nonzero */ true))
                 ctx.allowThreeWay = false;
 
             if (!updateJoinStatus(ctx, JS_USE_SH2))
@@ -2621,7 +2621,7 @@ bool handleDstPreds(SymJoinCtx &ctx)
         }
 
         if (!ctx.sh2.matchPreds(ctx.dst, ctx.valMap2[/* ltr */ 0])) {
-            if (!ctx.sh2.matchPreds(ctx.dst, ctx.valMap2[0], /* 0 only */ true))
+            if (ctx.sh2.matchPreds(ctx.dst, ctx.valMap2[0], /* nonzero */ true))
                 ctx.allowThreeWay = false;
 
             if (!updateJoinStatus(ctx, JS_USE_SH1))

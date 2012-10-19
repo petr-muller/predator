@@ -410,7 +410,7 @@ class SymHeapCore {
         bool matchPreds(
                 const SymHeapCore           &ref,
                 const TValMap               &valMap,
-                const bool                  neqZeroOnly = false)
+                const bool                  nonZeroOnly = false)
             const;
 
     public:

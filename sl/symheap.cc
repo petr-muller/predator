@@ -92,7 +92,7 @@ class NeqDb: public SymPairSet<TValId, /* IREFLEXIVE */ true> {
         friend bool SymHeapCore::matchPreds(
                 const SymHeapCore       &src,
                 const TValMap           &vMap,
-                const bool              neqZeroOnly)
+                const bool              nonZeroOnly)
             const;
 };
 
@@ -2835,7 +2835,7 @@ void SymHeapCore::copyRelevantPreds(SymHeapCore &dst, const TValMap &valMap)
 bool SymHeapCore::matchPreds(
         const SymHeapCore           &ref,
         const TValMap               &valMap,
-        const bool                   neqZeroOnly)
+        const bool                   nonZeroOnly)
     const
 {
     SymHeapCore &src = const_cast<SymHeapCore &>(*this);
@@ -2846,7 +2846,7 @@ bool SymHeapCore::matchPreds(
         TValId valLt = item.first;
         TValId valGt = item.second;
 
-        if (neqZeroOnly && VAL_NULL != valLt)
+        if (nonZeroOnly && VAL_NULL == valLt)
             continue;
 
         if (!translateValId(&valLt, dst, src, valMap))
