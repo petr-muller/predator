@@ -1185,6 +1185,18 @@ void SymExecCore::execFree(TValId val)
     this->valDestroyTarget(val);
 }
 
+void SymExecCore::execStackRestore()
+{
+    TValList anonStackRoots;
+    const CallInst callInst(this->bt_);
+    sh_.clearAnonStackObjects(anonStackRoots, callInst);
+
+    BOOST_FOREACH(const TValId root, anonStackRoots) {
+        CL_DEBUG_MSG(lw_, "releasing an anonymous stack object");
+        this->valDestroyTarget(root);
+    }
+}
+
 bool lhsFromOperand(ObjHandle *pLhs, SymProc &proc, const struct cl_operand &op)
 {
     if (seekRefAccessor(op.accessor))
@@ -1196,6 +1208,37 @@ bool lhsFromOperand(ObjHandle *pLhs, SymProc &proc, const struct cl_operand &op)
 
     CL_BREAK_IF(!pLhs->isValid());
     return true;
+}
+
+void SymExecCore::execStackAlloc(
+        const struct cl_operand         &opLhs,
+        const TSizeRange                &size)
+{
+    // resolve lhs
+    ObjHandle lhs;
+    if (!lhsFromOperand(&lhs, *this, opLhs))
+        // error alredy emitted
+        return;
+
+    if (!size.hi) {
+        // object of zero size could hardly be properly allocated
+        const TValId valUnknown = sh_.valCreate(VT_UNKNOWN, VO_STACK);
+        this->objSetValue(lhs, valUnknown);
+        return;
+    }
+
+    // now create an annonymous stack object
+    const CallInst callInst(this->bt_);
+    const TValId val = sh_.stackAlloc(size, callInst);
+
+    if (ep_.trackUninit) {
+        // uninitialized heap block
+        const TValId tplValue = sh_.valCreate(VT_UNKNOWN, VO_STACK);
+        sh_.writeUniformBlock(val, tplValue, size.lo);
+    }
+
+    // store the result of malloc
+    this->objSetValue(lhs, val);
 }
 
 void SymExecCore::execHeapAlloc(
