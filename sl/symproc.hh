@@ -227,6 +227,10 @@ class SymExecCore: public SymProc {
          */
         bool exec(SymState &dst, const CodeStorage::Insn &insn);
 
+        void execStackAlloc(const struct cl_operand &opLhs, const TSizeRange &);
+
+        void execStackRestore();
+
         void execHeapAlloc(SymState &dst, const CodeStorage::Insn &,
                            const TSizeRange size, const bool nullified);
 
@@ -250,5 +254,7 @@ class SymExecCore: public SymProc {
     private:
         const SymExecCoreParams ep_;
 };
+
+void setErrorRecoveryMode(int mode);
 
 #endif /* H_GUARD_SYM_PROC_H */

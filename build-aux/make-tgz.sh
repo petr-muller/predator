@@ -14,15 +14,17 @@ usage(){
 }
 
 PRUNE_ALWAYS=".git tests/linux-drivers \
-build-aux/xgcclib.sh \
 build-aux/make-tgz.sh \
 build-aux/README-ubuntu-release.patch \
 build-aux/cl-readme.patch \
+build-aux/sl-readme.patch \
 build-aux/cl-config.patch \
 build-aux/cl-switch-host.patch \
+build-aux/sl-switch-host.patch \
 build-aux/make-srpm.sh \
 build-aux/update-comments-in-tests.sh \
-build-aux/README-fedora-release.patch"
+build-aux/README-fedora-release.patch \
+sl/rank.sh"
 
 chlog_watch=
 drop_fwnull=no
@@ -109,6 +111,7 @@ fi
 
 # adapt README-ubuntu
 if test xyes = "x$readme_sl"; then
+    patch README < "build-aux/sl-readme.patch"
     patch docs/README-fedora < "build-aux/README-fedora-release.patch"
     patch docs/README-ubuntu < "build-aux/README-ubuntu-release.patch"
     patch "switch-host-gcc.sh" < "build-aux/sl-switch-host.patch"
@@ -153,7 +156,7 @@ test xyes = "x$drop_sl" && rm -rf sl    \
 # make a tarball
 cd ..
 test -d "$NAME" || die "internal error"
-tar cv "$NAME" | gzip -c > "${REPO}/${TGZ}" \
+tar c "$NAME" | gzip -c > "${REPO}/${TGZ}" \
     || die "failed to package the release"
 
 # cleanup

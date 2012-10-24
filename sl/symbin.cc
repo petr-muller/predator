@@ -355,6 +355,74 @@ bool handleKzalloc(
     return true;
 }
 
+bool handleStackSave(
+        SymState                                    &dst,
+        SymExecCore                                 &core,
+        const CodeStorage::Insn                     &insn,
+        const char                                  *name)
+{
+    const TLoc loc = &insn.loc;
+    const CodeStorage::TOperandList &opList = insn.operands;
+    if (2 != opList.size()) {
+        emitPrototypeError(loc, name);
+        return false;
+    }
+
+    CL_DEBUG_MSG(loc, "ignoring call of " << name << "()");
+    insertCoreHeap(dst, core, insn);
+    return true;
+}
+
+bool handleStackRestore(
+        SymState                                    &dst,
+        SymExecCore                                 &core,
+        const CodeStorage::Insn                     &insn,
+        const char                                  *name)
+{
+    const TLoc loc = &insn.loc;
+    const CodeStorage::TOperandList &opList = insn.operands;
+    if (3 != opList.size()) {
+        emitPrototypeError(loc, name);
+        return false;
+    }
+
+    CL_DEBUG_MSG(loc, "executing " << name << "()");
+    core.execStackRestore();
+    insertCoreHeap(dst, core, insn);
+    return true;
+}
+
+bool handleAlloca(
+        SymState                                    &dst,
+        SymExecCore                                 &core,
+        const CodeStorage::Insn                     &insn,
+        const char                                  *name)
+{
+    const TLoc loc = &insn.loc;
+    const CodeStorage::TOperandList &opList = insn.operands;
+
+    // this allows both __builtin_alloca(x) and __builtin_alloca_with_align(x,y)
+    if (opList.size() < 3 || 4 < opList.size()) {
+        emitPrototypeError(loc, name);
+        return false;
+    }
+
+    // amount of allocated memory must be known (TODO: relax this?)
+    const TValId valSize = core.valFromOperand(opList[/* size */ 2]);
+    IR::Range size;
+    if (rngFromVal(&size, core.sh(), valSize) && IR::Int0 <= size.lo) {
+        CL_DEBUG_MSG(loc, "executing " << name << "()");
+        core.execStackAlloc(insn.operands[/* dst */ 0], size);
+    }
+    else {
+        CL_ERROR_MSG(loc, "size arg of " << name<< "() is not a known integer");
+        core.printBackTrace(ML_ERROR);
+    }
+
+    insertCoreHeap(dst, core, insn);
+    return true;
+}
+
 bool handleMalloc(
         SymState                                    &dst,
         SymExecCore                                 &core,
@@ -662,6 +730,37 @@ bool handleStrncpy(
     return true;
 }
 
+bool handleAssume(
+        SymState                                    &dst,
+        SymExecCore                                 &core,
+        const CodeStorage::Insn                     &insn,
+        const char                                  *name)
+{
+    SymHeap &sh = core.sh();
+    const TLoc loc = core.lw();
+    const CodeStorage::TOperandList &opList = insn.operands;
+
+    if (3 != opList.size() || opList[0].code != CL_OPERAND_VOID) {
+        emitPrototypeError(loc, name);
+        return false;
+    }
+
+    const TValId valExpr = core.valFromOperand(opList[/* expr */ 2]);
+    const TValId valComp = compareValues(sh, CL_BINOP_EQ, VAL_FALSE, valExpr);
+
+    if (proveNeq(sh, VAL_FALSE, valComp)) {
+        CL_DEBUG_MSG(loc, name << "() got FALSE, skipping this code path!");
+        return true;
+    }
+
+    // TODO: it would be nice to call reflectCmpResult() in certain cases
+
+    // insert the resulting heap
+    CL_DEBUG_MSG(loc, name << "() failed to prove inconsistency");
+    insertCoreHeap(dst, core, insn);
+    return true;
+}
+
 bool handleNondetInt(
         SymState                                    &dst,
         SymExecCore                                 &core,
@@ -677,15 +776,10 @@ bool handleNondetInt(
     SymHeap &sh = core.sh();
     CL_DEBUG_MSG(&insn.loc, "executing " << name << "()");
 
-    // resolve dst
+    // set the returned value to a new unknown value
     const struct cl_operand &opDst = opList[0];
     const ObjHandle objDst = core.objByOperand(opDst);
-
-    // create a fresh value expressing full range
-    const CustomValue cv(IR::FullRange);
-    const TValId val = sh.valWrapCustom(cv);
-
-    // set the value to be returned
+    const TValId val = sh.valCreate(VT_UNKNOWN, VO_ASSIGNED);
     core.objSetValue(objDst, val);
 
     // insert the resulting heap
@@ -890,6 +984,12 @@ BuiltInTable *BuiltInTable::inst_;
 /// register built-ins
 BuiltInTable::BuiltInTable()
 {
+    // GCC built-in stack allocation
+    tbl_["__builtin_alloca"] /* before GCC 4.7.0 */ = handleAlloca;
+    tbl_["__builtin_alloca_with_align"]             = handleAlloca;
+    tbl_["__builtin_stack_restore"]                 = handleStackRestore;
+    tbl_["__builtin_stack_save"]                    = handleStackSave;
+
     // C run-time
     tbl_["abort"]                                   = handleAbort;
     tbl_["calloc"]                                  = handleCalloc;
@@ -915,12 +1015,9 @@ BuiltInTable::BuiltInTable()
     tbl_["___sl_plot_trace_once"]                   = handlePlotTraceOnce;
     tbl_["___sl_enable_debugging_of"]               = handleDebuggingOf;
 
-    // used in Competition on Software Verification held at TACAS 2012
-    tbl_["__VERIFIER_nondet_char"]                  = handleNondetInt;
-    tbl_["__VERIFIER_nondet_float"]                 = handleNondetInt;
-    tbl_["__VERIFIER_nondet_int"]                   = handleNondetInt;
-    tbl_["__VERIFIER_nondet_pointer"]               = handleNondetInt;
-    tbl_["__VERIFIER_nondet_short"]                 = handleNondetInt;
+    // used in the Competition on Software Verification held at TACAS
+    tbl_["__VERIFIER_assume"]                       = handleAssume;
+    //    __VERIFIER_nondet_*   functions are handled in the above layer
 
     // just to make life easier to our competitors (TODO: check for collisions)
     tbl_["__nondet"]                                = handleNondetInt;
@@ -948,16 +1045,29 @@ bool BuiltInTable::handleBuiltIn(
         const char                                  *name)
     const
 {
+    THandler hdl;
+
     TMap::const_iterator it = tbl_.find(name);
-    if (tbl_.end() == it)
-        // no fnc name matched as built-in
-        return false;
+    if (tbl_.end() == it) {
+        static const char namePrefixNondet[] = "__VERIFIER_nondet_";
+        static const size_t namePrefixLength = sizeof(namePrefixNondet) - 1U;
+        std::string namePrefix(name);
+        if (namePrefixLength < namePrefix.size())
+            namePrefix.resize(namePrefixLength);
+
+        if (std::string(namePrefixNondet) == namePrefix)
+            hdl = handleNondetInt;
+        else
+            // no fnc name matched as built-in
+            return false;
+    }
+    else
+        hdl = it->second;
 
     SymHeap &sh = core.sh();
     SymDumpRefHeap shRef(&sh);
     sh.traceUpdate(new Trace::InsnNode(sh.traceNode(), &insn, /* bin */ true));
 
-    const THandler hdl = it->second;
     return hdl(dst, core, insn, name);
 }
 
@@ -982,6 +1092,10 @@ bool fncNameFromOp(
 
     const TStorRef stor = core.sh().stor();
     const CodeStorage::Fnc *fnc = stor.fncs[uid];
+    if (!fnc->def.data.cst.data.cst_fnc.is_extern)
+        // only external functions are candidates for built-in functions
+        return false;
+
     const char *name = nameOf(*fnc);
     if (!name)
         return false;

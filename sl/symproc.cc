@@ -46,6 +46,13 @@
 #include <boost/foreach.hpp>
 #include <boost/tuple/tuple.hpp>
 
+static int errorRecoveryMode = (SE_ERROR_RECOVERY_MODE);
+
+void setErrorRecoveryMode(int mode)
+{
+    ::errorRecoveryMode = mode;
+}
+
 // /////////////////////////////////////////////////////////////////////////////
 // SymProc implementation
 void SymProc::printBackTrace(EMsgLevel level, bool forcePtrace)
@@ -75,21 +82,16 @@ void SymProc::printBackTrace(EMsgLevel level, bool forcePtrace)
     plotHeap(sh_, "error-state", lw_);
 #endif
 
-#if SE_ERROR_RECOVERY_MODE
-    errorDetected_ = true;
-#else
-    throw std::runtime_error("support for error recovery not compiled in");
-#endif
+    if (::errorRecoveryMode)
+        errorDetected_ = true;
+    else
+        throw std::runtime_error("error recovery is disabled");
 }
 
 bool SymProc::hasFatalError() const
 {
-#if 1 < SE_ERROR_RECOVERY_MODE
-    // full error recovery mode
-    return false;
-#else
-    return errorDetected_;
-#endif
+    return (::errorRecoveryMode < 2)
+        && errorDetected_;
 }
 
 TValId SymProc::valFromCst(const struct cl_operand &op)
@@ -1183,6 +1185,18 @@ void SymExecCore::execFree(TValId val)
     this->valDestroyTarget(val);
 }
 
+void SymExecCore::execStackRestore()
+{
+    TValList anonStackRoots;
+    const CallInst callInst(this->bt_);
+    sh_.clearAnonStackObjects(anonStackRoots, callInst);
+
+    BOOST_FOREACH(const TValId root, anonStackRoots) {
+        CL_DEBUG_MSG(lw_, "releasing an anonymous stack object");
+        this->valDestroyTarget(root);
+    }
+}
+
 bool lhsFromOperand(ObjHandle *pLhs, SymProc &proc, const struct cl_operand &op)
 {
     if (seekRefAccessor(op.accessor))
@@ -1194,6 +1208,37 @@ bool lhsFromOperand(ObjHandle *pLhs, SymProc &proc, const struct cl_operand &op)
 
     CL_BREAK_IF(!pLhs->isValid());
     return true;
+}
+
+void SymExecCore::execStackAlloc(
+        const struct cl_operand         &opLhs,
+        const TSizeRange                &size)
+{
+    // resolve lhs
+    ObjHandle lhs;
+    if (!lhsFromOperand(&lhs, *this, opLhs))
+        // error alredy emitted
+        return;
+
+    if (!size.hi) {
+        // object of zero size could hardly be properly allocated
+        const TValId valUnknown = sh_.valCreate(VT_UNKNOWN, VO_STACK);
+        this->objSetValue(lhs, valUnknown);
+        return;
+    }
+
+    // now create an annonymous stack object
+    const CallInst callInst(this->bt_);
+    const TValId val = sh_.stackAlloc(size, callInst);
+
+    if (ep_.trackUninit) {
+        // uninitialized heap block
+        const TValId tplValue = sh_.valCreate(VT_UNKNOWN, VO_STACK);
+        sh_.writeUniformBlock(val, tplValue, size.lo);
+    }
+
+    // store the result of malloc
+    this->objSetValue(lhs, val);
 }
 
 void SymExecCore::execHeapAlloc(
@@ -1520,6 +1565,69 @@ bool spliceOutAbstractPathCore(
     return true;
 }
 
+bool valMerge(SymState &dst, SymProc &proc, TValId v1, TValId v2);
+
+bool dlSegMergeAddressesOfEmpty(
+        SymState                    &dst,
+        SymProc                     &procTpl,
+        const TValId                 root1,
+        const TValId                 root2)
+{
+    // we need to clone the SymHeap and SymProc objects
+    SymHeap sh(procTpl.sh());
+    Trace::waiveCloneOperation(sh);
+    SymProc proc(sh, procTpl.bt());
+    proc.setLocation(procTpl.lw());
+
+    const TValId valNext1 = nextValFromSeg(sh, root1);
+    const TValId valNext2 = nextValFromSeg(sh, root2);
+
+    if (!spliceOutAbstractPathCore(proc, root1, valNext2))
+        CL_BREAK_IF("dlSegMergeAddressesOfEmpty() failed to remove a DLS");
+
+    if (valNext1 == valNext2) {
+        dst.insert(sh);
+        return true;
+    }
+
+    CL_DEBUG_MSG(proc.lw(),
+            "dlSegMergeAddressesIfNeeded() calls valMerge() recursively");
+
+   return valMerge(dst, proc, valNext1, valNext2);
+}
+
+bool dlSegMergeAddressesIfNeeded(
+        SymState                    &dst,
+        SymProc                     &proc,
+        const TValId                 v1,
+        const TValId                 v2)
+{
+    SymHeap &sh = proc.sh();
+
+    const TOffset off1 = sh.valOffset(v1);
+    const TOffset off2 = sh.valOffset(v2);
+    if (off1 != off2)
+        // the given value differ in target offset
+        return false;
+
+    const TValId root1 = sh.valRoot(v1);
+    const TValId root2 = sh.valRoot(v2);
+    if (root1 == root2 && root1 != segPeer(sh, root2))
+        // apparently not the case we are looking for
+        return false;
+
+    CL_BREAK_IF(root2 != segPeer(sh, root1));
+
+    if (!sh.segMinLength(root1))
+        // 0+ DLS --> we have to look through!
+        dlSegMergeAddressesOfEmpty(dst, proc, root1, root2);
+
+    dlSegReplaceByConcrete(sh, root1, root2);
+    sh.traceUpdate(new Trace::SpliceOutNode(sh.traceNode(), /* len */ 1));
+    dst.insert(sh);
+    return true;
+}
+
 bool spliceOutAbstractPath(
         SymProc                     &proc,
         const TValId                 atAddr,
@@ -1528,16 +1636,6 @@ bool spliceOutAbstractPath(
 {
     SymHeap &sh = proc.sh();
     const TValId seg = sh.valRoot(atAddr);
-    const TValId peer = segPeer(sh, seg);
-
-    if (pointingTo == peer && peer != seg) {
-        // assume identity over the two parts of a DLS
-        CL_BREAK_IF(readOnlyMode);
-
-        dlSegReplaceByConcrete(sh, seg, peer);
-        sh.traceUpdate(new Trace::SpliceOutNode(sh.traceNode(), /* len */ 1));
-        return true;
-    }
 
     TValId endPoint = pointingTo;
 
@@ -1591,6 +1689,10 @@ bool valMerge(SymState &dst, SymProc &proc, TValId v1, TValId v2)
         dst.insert(sh);
         return true;
     }
+
+    if (dlSegMergeAddressesIfNeeded(dst, proc, v1, v2))
+        // splice-out succeeded ... v1 -> dls <- v2
+        return true;
 
     // collect the sets of values we get by jumping over 0+ abstract objects
     TValSet seen1, seen2;

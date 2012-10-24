@@ -79,8 +79,8 @@ configure_file(${PROJECT_SOURCE_DIR}/probe.sh.in  ${PROJECT_BINARY_DIR}/probe.sh
 configure_file(${PROJECT_SOURCE_DIR}/register-paths.sh.in
     ${PROJECT_BINARY_DIR}/register-paths.sh                                       @ONLY)
 
-configure_file(${PROJECT_SOURCE_DIR}/chk-error-label-reachability.sh.in
-    ${PROJECT_BINARY_DIR}/chk-error-label-reachability.sh                         @ONLY)
+configure_file(${PROJECT_SOURCE_DIR}/check-property.sh.in
+    ${PROJECT_BINARY_DIR}/check-property.sh                                       @ONLY)
 
 # make install
 install(TARGETS sl DESTINATION lib)
@@ -117,7 +117,7 @@ set(tests
     0200 0201 0202 0203 0204 0205      0207 0208 0209
     0210      0212      0214 0215      0217 0218 0219
     0220 0221 0222 0223 0224 0225 0226 0227 0228 0229
-    0230 0231 0232 0233 0234      0236 0237 0238
+    0230 0231 0232 0233 0234      0236 0237 0238 0239
     0300      0302
                                   0316
     0400 0401 0402 0403 0404      0406      0408
